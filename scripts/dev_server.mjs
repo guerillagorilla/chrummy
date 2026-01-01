@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const ROOT = __dirname;
+const ROOT = path.resolve(__dirname, "..");
 const PORT = Number(process.env.PORT || 8000);
 const POLL_INTERVAL = 500;
 
@@ -85,7 +85,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   const cleanUrl = req.url.split("?")[0];
-  const requestedPath = cleanUrl === "/" ? "/index.html" : cleanUrl;
+  const requestedPath = cleanUrl === "/" ? "/public/index.html" : cleanUrl;
   const filePath = path.join(ROOT, requestedPath);
   if (!filePath.startsWith(ROOT)) {
     res.writeHead(403);

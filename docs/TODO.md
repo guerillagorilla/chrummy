@@ -2,13 +2,13 @@
 
 1. [x] Create web folder structure
 
-- index.html
-- styles.css
-- app.js
-- engine/
-- engine/gameEngine.js
-- engine/ai.js
-- assets/fonts/
+- public/index.html
+- public/assets/fonts/
+- src/app.js
+- src/styles.css
+- src/engine/
+- src/engine/gameEngine.js
+- src/engine/ai.js
 
 2. [x] Choose rendering method
 
@@ -56,7 +56,7 @@
 
 8. [x] Font setup
 
-- Add a suit-compatible font to assets/fonts
+- Add a suit-compatible font to public/assets/fonts
 - Use @font-face in CSS to render suits consistently
 
 9. [ ] Parity testing
@@ -73,12 +73,12 @@
 
 Suggested Web Layout
 
-index.html
-styles.css
-app.js
-engine/
+public/index.html
+src/styles.css
+src/app.js
+src/engine/
   gameEngine.js
   ai.js
-assets/
-  fonts/
+public/
+  assets/fonts/
     DejaVuSans.ttf (or NotoSansSymbols.ttf)

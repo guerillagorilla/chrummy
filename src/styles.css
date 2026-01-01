@@ -12,7 +12,7 @@
 
 @font-face {
   font-family: "SuitSymbols";
-  src: url("assets/fonts/DejaVuSans.ttf") format("truetype");
+  src: url("/public/assets/fonts/DejaVuSans.ttf") format("truetype");
   font-display: swap;
 }
 
