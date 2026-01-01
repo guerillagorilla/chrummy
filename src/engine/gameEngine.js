@@ -220,7 +220,7 @@ export class Game {
   }
 
   layOffAll(player) {
-    if (!player.hasLaidDown && player.melds.length === 0) return 0;
+    if (!player.hasLaidDown) return 0;
     const allMelds = this.players.flatMap((p) => p.melds);
     if (allMelds.length === 0) return 0;
     let moved = 0;
@@ -243,6 +243,7 @@ export class Game {
     const playerHasCard = player.hand.some((c) => c.cid === card.cid);
     const melds = this.players.flatMap((p) => p.melds);
     if (!playerHasCard) return false;
+    if (!player.hasLaidDown) return false;
     if (!melds.includes(meld)) return false;
     if (!meld.canAdd(card)) return false;
     meld.add(card);
@@ -251,6 +252,7 @@ export class Game {
   }
 
   canLayOff(player) {
+    if (!player.hasLaidDown) return false;
     const allMelds = this.players.flatMap((p) => p.melds);
     if (allMelds.length === 0) return false;
     if (player.hand.length <= 1) return false;

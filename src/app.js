@@ -12,14 +12,12 @@ const opponentHandEl = document.getElementById("opponent-hand");
 const yourMeldsEl = document.getElementById("your-melds");
 const opponentMeldsEl = document.getElementById("opponent-melds");
 const laydownBtn = document.getElementById("laydown-btn");
-const layoffBtn = document.getElementById("layoff-btn");
 const restartBtn = document.getElementById("restart-btn");
 const devModeToggle = document.getElementById("dev-mode");
 
 
 let game = new Game(2, 1);
 let state = "await_draw";
-let layoffMode = false;
 let selectedCardId = null;
 let devMode = false;
 
@@ -144,6 +142,21 @@ function renderPiles() {
   }
 }
 
+function clearSelectedHighlight() {
+  document.querySelectorAll(".card.selected").forEach((cardEl) => {
+    cardEl.classList.remove("selected");
+  });
+}
+
+function setSelectedHighlight(cardId) {
+  clearSelectedHighlight();
+  if (!cardId) return;
+  const cardEl = yourHandEl.querySelector(`[data-card-id="${cardId}"]`);
+  if (cardEl) {
+    cardEl.classList.add("selected");
+  }
+}
+
 function renderAll() {
   renderHand(yourHandEl, game.players[0].hand, {
     faceUp: true,
@@ -169,9 +182,8 @@ function renderAll() {
 
 function resetSelections() {
   selectedCardId = null;
-  layoffMode = false;
-  layoffBtn.classList.remove("active");
   clearMeldHighlights();
+  clearSelectedHighlight();
 }
 
 function startRound() {
@@ -275,23 +287,6 @@ laydownBtn.addEventListener("click", () => {
   renderAll();
 });
 
-layoffBtn.addEventListener("click", () => {
-  if (state !== "await_discard") return;
-  if (layoffMode) {
-    resetSelections();
-    setMessage("Lay-off mode canceled.");
-    renderAll();
-    return;
-  }
-  if (!game.canLayOff(game.players[0])) {
-    setMessage("No lay offs available.");
-    return;
-  }
-  layoffMode = true;
-  layoffBtn.classList.add("active");
-  setMessage("Lay-off mode: select a card, then click a meld.");
-});
-
 restartBtn.addEventListener("click", startRound);
 
 devModeToggle.addEventListener("change", (event) => {
@@ -311,14 +306,16 @@ devModeToggle.addEventListener("change", (event) => {
 yourHandEl.addEventListener("click", (event) => {
   const cardEl = event.target.closest(".card");
   if (!cardEl) return;
-  if (state !== "await_discard" && state !== "await_draw") return;
-  const cardId = Number(cardEl.dataset.cardId);
-  if (!cardId) return;
-  if (layoffMode) {
-    selectedCardId = cardId;
-    renderAll();
+  if (state !== "await_discard") return;
+  if (!game.players[0].hasLaidDown) {
+    setMessage("Lay down first before laying off.");
     return;
   }
+  const cardId = Number(cardEl.dataset.cardId);
+  if (!cardId) return;
+  selectedCardId = cardId;
+  setMessage("Selected card. Click a meld to lay off.");
+  setSelectedHighlight(cardId);
 });
 
 yourHandEl.addEventListener("dblclick", (event) => {
@@ -347,7 +344,8 @@ function handleLayoff(cardId, meldEl) {
 }
 
 function handleLayoffClick(event) {
-  if (!layoffMode || !selectedCardId) return;
+  if (!selectedCardId || state !== "await_discard") return;
+  if (!game.players[0].hasLaidDown) return;
   const meldEl = event.target.closest(".meld");
   handleLayoff(selectedCardId, meldEl);
 }
@@ -390,7 +388,7 @@ function enableDragAndDrop() {
     event.dataTransfer.setData("text/plain", cardId);
     event.dataTransfer.effectAllowed = "move";
     draggingCardId = Number(cardId);
-    if (state === "await_discard") {
+    if (state === "await_discard" && game.players[0].hasLaidDown) {
       updateMeldHighlights(draggingCardId);
     }
   });
@@ -485,6 +483,7 @@ function enableDragAndDrop() {
   [opponentMeldsEl, yourMeldsEl].forEach((meldArea) => {
     meldArea.addEventListener("dragover", (event) => {
       if (state !== "await_discard") return;
+      if (!game.players[0].hasLaidDown) return;
       // Check if there are any melds to lay off to
       const allMelds = [...game.players[0].melds, ...game.players[1].melds];
       if (allMelds.length === 0) return;
@@ -493,6 +492,7 @@ function enableDragAndDrop() {
 
     meldArea.addEventListener("drop", (event) => {
       if (state !== "await_discard") return;
+      if (!game.players[0].hasLaidDown) return;
       event.preventDefault();
       const cardId = Number(event.dataTransfer.getData("text/plain")) || draggingCardId;
       

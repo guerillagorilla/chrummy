@@ -36,6 +36,7 @@ See `docs/rules.md` for detailed gameplay rules and AI behavior notes.
 
 - Double-click draw pile or discard pile to draw.
 - Double-click a card in your hand to discard it.
-- Use the Lay Down / Lay Off buttons for meld actions.
+- Use the Lay Down button for meld actions.
+- Click a card, then a meld to lay off.
 - Drag cards onto the discard pile to discard.
 - Drag a card onto a meld (Lay Off mode) to place it.
