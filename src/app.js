@@ -114,11 +114,15 @@ function renderMelds(container, melds, owner) {
 }
 
 function renderPiles() {
-  discardCardEl.textContent = "Empty";
-  discardCardEl.classList.remove("back");
+  discardCardEl.innerHTML = "";
+  discardCardEl.classList.add("back");
   const topDiscard = game.discardPile[game.discardPile.length - 1];
   if (topDiscard) {
-    discardCardEl.innerHTML = cardLabel(topDiscard);
+    const cardEl = renderCard(topDiscard, { faceUp: true });
+    discardCardEl.appendChild(cardEl);
+    discardCardEl.classList.remove("back");
+  } else {
+    discardCardEl.textContent = "Empty";
   }
 }
 
@@ -149,6 +153,7 @@ function resetSelections() {
   selectedCardId = null;
   layoffMode = false;
   layoffBtn.classList.remove("active");
+  clearMeldHighlights();
 }
 
 function startRound() {
@@ -299,11 +304,7 @@ yourHandEl.addEventListener("dblclick", (event) => {
 });
 
 function handleLayoff(cardId, meldEl) {
-  if (!meldEl) return false;
-  const owner = meldEl.dataset.owner;
-  const meldIndex = Number(meldEl.dataset.meldIndex);
-  const melds = owner === "you" ? game.players[0].melds : game.players[1].melds;
-  const meld = melds[meldIndex];
+  const meld = getMeldFromElement(meldEl);
   const card = game.players[0].hand.find((c) => c.cid === cardId);
   if (!card || !meld) return false;
   if (game.layOffCardToMeld(game.players[0], card, meld)) {
@@ -323,6 +324,32 @@ function handleLayoffClick(event) {
   handleLayoff(selectedCardId, meldEl);
 }
 
+function getMeldFromElement(meldEl) {
+  if (!meldEl) return null;
+  const owner = meldEl.dataset.owner;
+  const meldIndex = Number(meldEl.dataset.meldIndex);
+  const melds = owner === "you" ? game.players[0].melds : game.players[1].melds;
+  return melds[meldIndex] ?? null;
+}
+
+function clearMeldHighlights() {
+  document.querySelectorAll(".meld.drop-valid").forEach((meldEl) => {
+    meldEl.classList.remove("drop-valid");
+  });
+}
+
+function updateMeldHighlights(cardId) {
+  clearMeldHighlights();
+  const card = game.players[0].hand.find((c) => c.cid === cardId);
+  if (!card) return;
+  document.querySelectorAll(".meld").forEach((meldEl) => {
+    const meld = getMeldFromElement(meldEl);
+    if (meld && meld.canAdd(card)) {
+      meldEl.classList.add("drop-valid");
+    }
+  });
+}
+
 [opponentMeldsEl, yourMeldsEl].forEach((meldArea) => {
   meldArea.addEventListener("click", handleLayoffClick);
 });
@@ -335,11 +362,15 @@ function enableDragAndDrop() {
     event.dataTransfer.setData("text/plain", cardId);
     event.dataTransfer.effectAllowed = "move";
     draggingCardId = Number(cardId);
+    if (state === "await_discard") {
+      updateMeldHighlights(draggingCardId);
+    }
   });
 
   yourHandEl.addEventListener("dragend", () => {
     draggingCardId = null;
     lastDropTargetId = null;
+    clearMeldHighlights();
   });
 
   yourHandEl.addEventListener("dragover", (event) => {
@@ -376,6 +407,7 @@ function enableDragAndDrop() {
     const cardId = Number(event.dataTransfer.getData("text/plain"));
     const card = game.players[0].hand.find((c) => c.cid === cardId);
     handlePlayerDiscard(card);
+    clearMeldHighlights();
   });
 
   [opponentMeldsEl, yourMeldsEl].forEach((meldArea) => {
@@ -391,10 +423,36 @@ function enableDragAndDrop() {
       if (state !== "await_discard") return;
       event.preventDefault();
       const cardId = Number(event.dataTransfer.getData("text/plain")) || draggingCardId;
-      const meldEl = event.target.closest(".meld");
+      
+      // Try exact meld first, then find nearest valid meld
+      let meldEl = event.target.closest(".meld");
+      if (!meldEl) {
+        // Find the valid meld that's highlighted (if only one, use it)
+        const validMelds = meldArea.querySelectorAll(".meld.drop-valid");
+        if (validMelds.length === 1) {
+          meldEl = validMelds[0];
+        } else if (validMelds.length > 1) {
+          // Find closest valid meld to drop position
+          let closest = null;
+          let closestDist = Infinity;
+          validMelds.forEach((m) => {
+            const rect = m.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const dist = Math.hypot(event.clientX - cx, event.clientY - cy);
+            if (dist < closestDist) {
+              closestDist = dist;
+              closest = m;
+            }
+          });
+          meldEl = closest;
+        }
+      }
+      
       if (meldEl && cardId) {
         handleLayoff(cardId, meldEl);
       }
+      clearMeldHighlights();
     });
   });
 }
