@@ -81,5 +81,5 @@ export function aiTurn(game, playerIndex) {
     log.push(`Discarded ${discard.rank}${discard.suit}.`);
   }
 
-  return { log, drewCard: drawn, drawChoice };
+  return { log, drewCard: drawn, drawChoice, discarded: discard };
 }

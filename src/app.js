@@ -27,9 +27,27 @@ let draggingCardId = null;
 let lastDropTargetId = null;
 let revealOpponentCardId = null;
 let revealTimer = null;
+const soundFiles = {
+  draw: "/public/assets/sounds/cockatrice/draw.wav",
+  play: "/public/assets/sounds/cockatrice/playcard.wav",
+  discard: "/public/assets/sounds/cockatrice/tap.wav",
+};
+const sounds = Object.fromEntries(
+  Object.entries(soundFiles).map(([key, src]) => [key, new Audio(src)]),
+);
 
 function setMessage(text) {
   messageEl.textContent = text;
+}
+
+function playSound(key) {
+  const base = sounds[key];
+  if (!base) return;
+  const audio = base.cloneNode();
+  audio.volume = 0.6;
+  audio.play().catch(() => {
+    // Audio may be blocked until user interaction; ignore silently.
+  });
 }
 
 function updateScore() {
@@ -180,6 +198,7 @@ function handlePlayerDraw(source) {
   const card = source === "discard" ? game.drawFromDiscard(player) : game.drawFromStock(player);
   if (card) {
     setMessage(`You drew ${card.rank} from ${source}.`);
+    playSound("draw");
   } else {
     setMessage(`No cards available in ${source}.`);
   }
@@ -192,6 +211,7 @@ function handlePlayerDiscard(card) {
   if (!card) return;
   game.discard(game.players[0], card);
   setMessage(`You discarded ${card.rank}.`);
+  playSound("discard");
   renderAll();
   if (game.checkWinAfterDiscard(game.players[0])) {
     game.applyRoundScores(0);
@@ -212,6 +232,9 @@ function runAiTurn() {
   if (result.drawChoice === "deck" && result.drewCard && devMode) {
     logOpponent(`(Hidden draw was ${result.drewCard.rank}.)`);
   }
+  if (result.drewCard) {
+    playSound("draw");
+  }
   const shouldReveal =
     result.drewCard &&
     !devMode &&
@@ -225,6 +248,9 @@ function runAiTurn() {
       revealOpponentCardId = null;
       renderAll();
     }, 1500);
+  }
+  if (result.discarded) {
+    playSound("discard");
   }
 
   if (game.checkWinAfterDiscard(game.players[1])) {
@@ -242,6 +268,7 @@ laydownBtn.addEventListener("click", () => {
   if (state !== "await_discard") return;
   if (game.tryLayDown(game.players[0])) {
     setMessage("You laid down two 3-of-a-kinds.");
+    playSound("play");
   } else {
     setMessage("No valid two 3-of-a-kinds.");
   }
@@ -309,6 +336,7 @@ function handleLayoff(cardId, meldEl) {
   if (!card || !meld) return false;
   if (game.layOffCardToMeld(game.players[0], card, meld)) {
     setMessage(`Laid off ${card.rank} to meld.`);
+    playSound("play");
     resetSelections();
     renderAll();
     return true;
