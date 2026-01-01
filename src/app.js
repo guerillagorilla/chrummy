@@ -409,19 +409,63 @@ function enableDragAndDrop() {
   yourHandEl.addEventListener("drop", (event) => {
     if (state !== "await_draw" && state !== "await_discard") return;
     event.preventDefault();
-    const targetEl = event.target.closest(".card");
-    if (!targetEl) return;
-    const targetId = Number(targetEl.dataset.cardId);
     const cardId = Number(event.dataTransfer.getData("text/plain")) || draggingCardId;
-    if (!cardId || targetId === cardId) return;
-    if (lastDropTargetId === targetId) return;
+    if (!cardId) return;
+    
+    // Find target card or nearest position
+    let targetEl = event.target.closest(".card");
+    let toIndex;
+    
+    if (targetEl) {
+      const targetId = Number(targetEl.dataset.cardId);
+      if (targetId === cardId) return;
+      if (lastDropTargetId === targetId) return;
+      toIndex = game.players[0].hand.findIndex((card) => card.cid === targetId);
+      lastDropTargetId = targetId;
+    } else {
+      // Dropped in gap - find nearest card position based on X
+      const cards = yourHandEl.querySelectorAll(".card");
+      if (cards.length === 0) return;
+
+      const firstRect = cards[0].getBoundingClientRect();
+      const lastRect = cards[cards.length - 1].getBoundingClientRect();
+
+      if (event.clientX > lastRect.right) {
+        toIndex = cards.length;
+      } else if (event.clientX < firstRect.left) {
+        toIndex = 0;
+      } else {
+        let closestIdx = 0;
+        let closestDist = Infinity;
+        cards.forEach((card, idx) => {
+          const rect = card.getBoundingClientRect();
+          const cardCenter = rect.left + rect.width / 2;
+          const dist = Math.abs(event.clientX - cardCenter);
+          if (dist < closestDist) {
+            closestDist = dist;
+            closestIdx = idx;
+          }
+        });
+
+        // If dropped to the right of center, insert after
+        const closestRect = cards[closestIdx].getBoundingClientRect();
+        const closestCenter = closestRect.left + closestRect.width / 2;
+        if (event.clientX > closestCenter && closestIdx < cards.length - 1) {
+          closestIdx++;
+        }
+        toIndex = closestIdx;
+      }
+    }
+    
     const hand = game.players[0].hand;
     const fromIndex = hand.findIndex((card) => card.cid === cardId);
-    const toIndex = hand.findIndex((card) => card.cid === targetId);
-    if (fromIndex === -1 || toIndex === -1) return;
+    if (fromIndex === -1 || toIndex === -1 || toIndex === undefined) return;
+    if (fromIndex === toIndex) return;
+    
     const [moved] = hand.splice(fromIndex, 1);
-    hand.splice(toIndex, 0, moved);
-    lastDropTargetId = targetId;
+    // Adjust toIndex if we removed from before it
+    const adjustedToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+    hand.splice(adjustedToIndex, 0, moved);
     renderAll();
   });
 
