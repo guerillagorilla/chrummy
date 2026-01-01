@@ -290,6 +290,7 @@ yourHandEl.addEventListener("click", (event) => {
 });
 
 yourHandEl.addEventListener("dblclick", (event) => {
+  if (state !== "await_discard") return;
   const cardEl = event.target.closest(".card");
   if (!cardEl) return;
   const cardId = Number(cardEl.dataset.cardId);
@@ -297,23 +298,29 @@ yourHandEl.addEventListener("dblclick", (event) => {
   handlePlayerDiscard(card);
 });
 
-function handleLayoffClick(event) {
-  if (!layoffMode || !selectedCardId) return;
-  const meldEl = event.target.closest(".meld");
-  if (!meldEl) return;
+function handleLayoff(cardId, meldEl) {
+  if (!meldEl) return false;
   const owner = meldEl.dataset.owner;
   const meldIndex = Number(meldEl.dataset.meldIndex);
   const melds = owner === "you" ? game.players[0].melds : game.players[1].melds;
   const meld = melds[meldIndex];
-  const card = game.players[0].hand.find((c) => c.cid === selectedCardId);
-  if (!card || !meld) return;
+  const card = game.players[0].hand.find((c) => c.cid === cardId);
+  if (!card || !meld) return false;
   if (game.layOffCardToMeld(game.players[0], card, meld)) {
-    setMessage("Card laid off.");
+    setMessage(`Laid off ${card.rank} to meld.`);
+    resetSelections();
+    renderAll();
+    return true;
   } else {
     setMessage("Cannot lay off to that meld.");
+    return false;
   }
-  resetSelections();
-  renderAll();
+}
+
+function handleLayoffClick(event) {
+  if (!layoffMode || !selectedCardId) return;
+  const meldEl = event.target.closest(".meld");
+  handleLayoff(selectedCardId, meldEl);
 }
 
 [opponentMeldsEl, yourMeldsEl].forEach((meldArea) => {
@@ -373,16 +380,21 @@ function enableDragAndDrop() {
 
   [opponentMeldsEl, yourMeldsEl].forEach((meldArea) => {
     meldArea.addEventListener("dragover", (event) => {
-      if (!layoffMode || state !== "await_discard") return;
+      if (state !== "await_discard") return;
+      // Check if there are any melds to lay off to
+      const allMelds = [...game.players[0].melds, ...game.players[1].melds];
+      if (allMelds.length === 0) return;
       event.preventDefault();
     });
 
     meldArea.addEventListener("drop", (event) => {
-      if (!layoffMode || state !== "await_discard") return;
+      if (state !== "await_discard") return;
       event.preventDefault();
-      const cardId = Number(event.dataTransfer.getData("text/plain"));
-      selectedCardId = cardId;
-      handleLayoffClick(event);
+      const cardId = Number(event.dataTransfer.getData("text/plain")) || draggingCardId;
+      const meldEl = event.target.closest(".meld");
+      if (meldEl && cardId) {
+        handleLayoff(cardId, meldEl);
+      }
     });
   });
 }
