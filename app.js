@@ -25,6 +25,8 @@ let devMode = false;
 
 let draggingCardId = null;
 let lastDropTargetId = null;
+let revealOpponentCardId = null;
+let revealTimer = null;
 
 function setMessage(text) {
   messageEl.textContent = text;
@@ -52,7 +54,6 @@ function renderCard(card, options = {}) {
   cardEl.className = "card";
   if (!faceUp) {
     cardEl.classList.add("back");
-    cardEl.textContent = "Hidden";
     return cardEl;
   }
 
@@ -127,10 +128,17 @@ function renderAll() {
     selectable: true,
     selectedId: selectedCardId,
   });
-  const revealOpponent = devMode;
-  renderHand(opponentHandEl, game.players[1].hand, {
-    faceUp: revealOpponent,
-  });
+  opponentHandEl.innerHTML = "";
+  for (const card of game.players[1].hand) {
+    const revealThis = devMode || card.cid === revealOpponentCardId;
+    const cardEl = renderCard(card, {
+      faceUp: revealThis,
+    });
+    if (!devMode && card.cid === revealOpponentCardId) {
+      cardEl.classList.add("reveal");
+    }
+    opponentHandEl.appendChild(cardEl);
+  }
   renderMelds(yourMeldsEl, game.players[0].melds, "you");
   renderMelds(opponentMeldsEl, game.players[1].melds, "opponent");
   renderPiles();
@@ -147,6 +155,11 @@ function startRound() {
   game.startRound();
   state = "await_draw";
   resetSelections();
+  revealOpponentCardId = null;
+  if (revealTimer) {
+    clearTimeout(revealTimer);
+    revealTimer = null;
+  }
   opponentLogEl.innerHTML = "";
   setMessage("Your turn: draw from deck or discard.");
   renderAll();
@@ -193,6 +206,20 @@ function runAiTurn() {
   result.log.forEach((entry) => logOpponent(entry));
   if (result.drawChoice === "deck" && result.drewCard && devMode) {
     logOpponent(`(Hidden draw was ${result.drewCard.rank}.)`);
+  }
+  const shouldReveal =
+    result.drewCard &&
+    !devMode &&
+    (result.drawChoice === "discard" || (result.drawChoice === "deck" && result.drewCard.isWild()));
+  if (shouldReveal) {
+    revealOpponentCardId = result.drewCard.cid;
+    if (revealTimer) {
+      clearTimeout(revealTimer);
+    }
+    revealTimer = setTimeout(() => {
+      revealOpponentCardId = null;
+      renderAll();
+    }, 1500);
   }
 
   if (game.checkWinAfterDiscard(game.players[1])) {
