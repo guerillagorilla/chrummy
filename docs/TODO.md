@@ -68,6 +68,47 @@
 
 - Add WebSocket server for multiplayer
 - Add lobby / player names / turn animations
+- Add reconnects and error handling for multiplayer
+
+---
+
+Multiplayer Outline (Draft)
+
+1. WebSocket Server (Recommended)
+
+- Node.js server holds authoritative game state
+- Players connect via WebSocket, send actions (draw, discard, laydown, layoff)
+- Server validates moves and broadcasts updates
+- Each player only sees their hand + public info (melds, discard, opponent card count)
+
+```
+Client A                Server                Client B
+   |-- draw:deck -------->|                      |
+   |<-- state update -----|-- state update ----->|
+   |-- discard:card ----->|                      |
+   |<-- state update -----|-- state update ----->|
+```
+
+2. Room System
+
+- Generate room codes (e.g., "ABCD")
+- First player creates room, second joins with code
+- Could add matchmaking later
+
+3. Key Changes Needed:
+
+- Move `Game` class to server-side only
+- Client becomes a "view" that renders state and sends actions
+- Server sends filtered state (hide opponent's hand)
+- Handle disconnects/reconnects
+
+Simple MVP plan:
+
+1. Add `ws` package to Node server
+2. Create rooms with game instances
+3. Client connects, joins room, receives initial state
+4. Actions sent as JSON: `{type: "draw", source: "deck"}`
+5. Server validates, updates game, broadcasts new state
 
 ---
 
