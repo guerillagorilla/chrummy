@@ -61,7 +61,7 @@
 
 9. [ ] Parity testing
 
-- Run several rounds and compare behavior against the rules (bothj player and opponent behaviors).
+- Run several rounds and compare behavior against the rules (both player and opponent behaviors).
 - Verify scoring and AI match docs/rules.md.
 
 10. [ ] Optional later
@@ -79,7 +79,6 @@ app.js
 engine/
   gameEngine.js
   ai.js
-  rules.js
 assets/
   fonts/
     DejaVuSans.ttf (or NotoSansSymbols.ttf)

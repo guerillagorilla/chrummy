@@ -2,21 +2,15 @@
 
 Web prototype for a Chinese Rummy card game.
 
-## Setup
+## Setup and Run
 
-Install Node if needed, then:
+Install Node (18+), then start the dev server:
 
 ```bash
 npm run dev
 ```
 
-## Run
-
-Start the dev server and open the app:
-
-```bash
-node dev_server.mjs
-```
+Open `http://localhost:8000` in a browser.
 
 ## Deck Rules (Chinese Rummy)
 
