@@ -9,7 +9,7 @@
 - Setup: remaining cards become the face-down draw stack; top card is turned face-up as the discard.
 - Turn order: player to dealer’s left goes first, then clockwise.
 - On your turn you must draw first: either the face-up discard or the face-down draw stack.
-- After drawing, you may lay down and/or lay off, then must discard exactly one card to end your turn.
+- After drawing, you may lay down and/or lay off (once you have laid down), then must discard exactly one card to end your turn.
 - Win condition: a player wins the round when they reach 0 cards (after lay down/lay off/discard).
 
 ## Melds and Lay Downs
@@ -56,7 +56,7 @@
 ### Lay down / lay off
 
 - After drawing, AI tries to lay down two 3-of-a-kinds (50% natural rule enforced).
-- AI then lays off any eligible cards if possible.
+- AI then lays off any eligible cards if possible (after laying down).
 
 ### Discard behavior
 
