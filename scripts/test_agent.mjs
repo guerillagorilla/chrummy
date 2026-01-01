@@ -1,9 +1,8 @@
-// Test agent that plays the game automatically
-// Run with: node test_agent.mjs
+// Test agent that plays the game automatically using the real AI
+// Run with: node scripts/test_agent.mjs
 
-import { Game } from "./engine/gameEngine.js";
-
-const JokerRank = "JOKER";
+import { Game, JokerRank } from "../src/engine/gameEngine.js";
+import { aiTurn } from "../src/engine/ai.js";
 
 function cardLabel(card) {
   if (!card) return "Empty";
@@ -13,11 +12,24 @@ function cardLabel(card) {
 }
 
 function handStr(hand) {
-  return hand.map(cardLabel).join(" ");
+  // Sort by rank for easier reading
+  const rankOrder = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", JokerRank];
+  const sorted = [...hand].sort((a, b) => {
+    const aIdx = rankOrder.indexOf(a.rank);
+    const bIdx = rankOrder.indexOf(b.rank);
+    if (aIdx !== bIdx) return aIdx - bIdx;
+    return a.suit.localeCompare(b.suit);
+  });
+  return sorted.map(cardLabel).join(" ");
+}
+
+function meldsStr(melds) {
+  if (!melds || melds.length === 0) return "none";
+  return melds.map(m => m.cards.map(cardLabel).join(",")).join(" | ");
 }
 
 function playGame() {
-  const game = new Game(2, 0);
+  const game = new Game(2, 1); // Dealer is opponent, so You go first
   let turn = 0;
   const maxTurns = 100;
 
@@ -29,103 +41,51 @@ function playGame() {
 
   while (turn < maxTurns) {
     turn++;
-    const currentPlayer = game.currentPlayer();
-    const isHuman = game.currentPlayerIndex === 0;
-    const playerName = isHuman ? "You" : "Opp";
+    const playerIndex = game.currentPlayerIndex;
+    const playerName = playerIndex === 0 ? "You" : "Opp";
 
-    // Draw phase
-    const topDiscard = game.discardPile[game.discardPile.length - 1];
-    let drawChoice = "deck";
+    // Both players use the real AI
+    const result = aiTurn(game, playerIndex);
     
-    // Simple AI: take discard if it matches a rank in hand or is wild
-    if (topDiscard) {
-      const hasMatch = currentPlayer.hand.some(c => c.rank === topDiscard.rank);
-      if (hasMatch || topDiscard.rank === JokerRank || topDiscard.rank === "2") {
-        drawChoice = "discard";
-      }
-    }
-
-    let drewCard;
-    if (drawChoice === "discard") {
-      drewCard = game.drawFromDiscard(currentPlayer);
-    } else {
-      drewCard = game.drawFromStock(currentPlayer);
+    // Format output
+    const drawInfo = result.drewCard ? `+${cardLabel(result.drewCard)} (${result.drawChoice})` : "(no draw)";
+    console.log(`T${turn} ${playerName}: ${drawInfo}`);
+    
+    // Show lay down
+    const player = game.players[playerIndex];
+    if (result.log.some(l => l.includes("Laid down"))) {
+      console.log(`  *** LAY DOWN! ${meldsStr(player.melds)}`);
     }
     
-    console.log(`T${turn} ${playerName}: +${cardLabel(drewCard)} (${drawChoice})`);
-
-    // Try to lay down if possible (need 2 triplets)
-    if (!currentPlayer.hasLaidDown) {
-      const success = game.tryLayDown(currentPlayer);
-      if (success) {
-        console.log(`  *** LAY DOWN! ${currentPlayer.melds.map(m => m.cards.map(cardLabel).join(",")).join(" | ")}`);
-      }
-    }
-
-    // Try to lay off
-    if (currentPlayer.hasLaidDown) {
-      const moved = game.layOffAll(currentPlayer);
-      if (moved > 0) {
-        console.log(`  Laid off ${moved} cards`);
-      }
-    }
-
-    // Check if player has 0 or 1 card (can win by discarding)
-    if (currentPlayer.hand.length === 0) {
-      console.log(`\n=== ${playerName} WINS (0 cards)! ===`);
-      break;
-    }
-
-    // Discard (pick worst card - highest point singleton, never discard wild if possible)
-    let cardToDiscard = null;
-    const hand = currentPlayer.hand;
-    
-    // Count ranks
-    const rankCounts = {};
-    for (const c of hand) {
-      rankCounts[c.rank] = (rankCounts[c.rank] || 0) + 1;
+    // Show lay off
+    if (result.log.some(l => l.includes("Laid off"))) {
+      const layoffLog = result.log.find(l => l.includes("Laid off"));
+      console.log(`  ${layoffLog}`);
     }
     
-    // Find singletons (non-wild)
-    const singletons = hand.filter(c => 
-      rankCounts[c.rank] === 1 && c.rank !== "2" && c.rank !== JokerRank
-    );
-    
-    if (singletons.length > 0) {
-      // Discard highest point singleton
-      singletons.sort((a, b) => {
-        const pointA = ["10", "J", "Q", "K", "A"].includes(a.rank) ? 10 : 5;
-        const pointB = ["10", "J", "Q", "K", "A"].includes(b.rank) ? 10 : 5;
-        return pointB - pointA;
-      });
-      cardToDiscard = singletons[0];
-    } else {
-      // No singletons - discard first non-wild, or first card if all wilds
-      cardToDiscard = hand.find(c => c.rank !== "2" && c.rank !== JokerRank) || hand[0];
-    }
-
-    game.discard(currentPlayer, cardToDiscard);
-    console.log(`  -${cardLabel(cardToDiscard)} | Hand: ${handStr(currentPlayer.hand)}`);
+    // Show discard and hand
+    const discardStr = result.discarded ? `-${cardLabel(result.discarded)}` : "(no discard)";
+    console.log(`  ${discardStr} | Hand: ${handStr(player.hand)}`);
     
     // Check win after discard
-    if (currentPlayer.hand.length === 0 && currentPlayer.hasLaidDown) {
+    if (player.hand.length === 0 && player.hasLaidDown) {
       console.log(`\n=== ${playerName} WINS! ===`);
-      console.log(`Your melds: ${game.players[0].melds.map(m => m.cards.map(cardLabel).join(",")).join(" | ") || "none"}`);
-      console.log(`Opp melds:  ${game.players[1].melds.map(m => m.cards.map(cardLabel).join(",")).join(" | ") || "none"}`);
+      console.log(`Your melds: ${meldsStr(game.players[0].melds)}`);
+      console.log(`Opp melds:  ${meldsStr(game.players[1].melds)}`);
       console.log(`Your hand:  ${handStr(game.players[0].hand) || "(empty)"}`);
       console.log(`Opp hand:   ${handStr(game.players[1].hand) || "(empty)"}`);
-      break;
+      return;
     }
 
     // Next player
     game.currentPlayerIndex = (game.currentPlayerIndex + 1) % 2;
   }
 
-  if (turn >= maxTurns) {
-    console.log("\nGame exceeded max turns!");
-    console.log(`Your hand:  ${handStr(game.players[0].hand)}`);
-    console.log(`Opp hand:   ${handStr(game.players[1].hand)}`);
-  }
+  console.log("\nGame exceeded max turns!");
+  console.log(`Your melds: ${meldsStr(game.players[0].melds)}`);
+  console.log(`Opp melds:  ${meldsStr(game.players[1].melds)}`);
+  console.log(`Your hand:  ${handStr(game.players[0].hand)}`);
+  console.log(`Opp hand:   ${handStr(game.players[1].hand)}`);
 }
 
 playGame();

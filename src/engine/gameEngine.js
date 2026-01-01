@@ -1,5 +1,5 @@
 const SUITS = ["spades", "hearts", "diamonds", "clubs"];
-const RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
 const JOKER = "JOKER";
 
 let nextId = 1;
