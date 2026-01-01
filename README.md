@@ -1,28 +1,21 @@
-# Chinese Rummy (Python)
+# Chinese Rummy (Web)
 
-Prototype for a Chinese Rummy card game.
+Web prototype for a Chinese Rummy card game.
 
 ## Setup
 
-1) Create and activate a virtual environment (example):
+Install Node if needed, then:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-2) Install dependencies:
-
-```bash
-python -m pip install -r requirements.txt
+npm run dev
 ```
 
 ## Run
 
-Pygame mini-game:
+Start the dev server and open the app:
 
 ```bash
-python pygame_viewer.py
+node dev_server.mjs
 ```
 
 ## Deck Rules (Chinese Rummy)
@@ -43,14 +36,12 @@ python pygame_viewer.py
 
 ## Rules
 
-See `rules.md` for detailed gameplay rules and AI behavior notes.
+See `docs/rules.md` for detailed gameplay rules and AI behavior notes.
 
-## Controls (Pygame)
+## Controls (Web)
 
-- D: draw from deck
-- F: draw from discard
-- L: lay down two 3-of-a-kinds (if available)
-- O: lay off cards (click a hand card, then a meld)
-- 1-9: discard the selected card
-- R: restart round
-- Esc or window close: quit
+- Double-click draw pile or discard pile to draw.
+- Double-click a card in your hand to discard it.
+- Use the Lay Down / Lay Off buttons for meld actions.
+- Drag cards onto the discard pile to discard.
+- Drag a card onto a meld (Lay Off mode) to place it.

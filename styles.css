@@ -1,0 +1,310 @@
+:root {
+  --felt-dark: #0d3b2a;
+  --felt-light: #145a3c;
+  --accent: #d8b25a;
+  --ink: #0b0b0b;
+  --paper: #f6f1e8;
+  --danger: #b83b3b;
+  --shadow: rgba(0, 0, 0, 0.25);
+  --card-radius: 8px;
+  --gap: 10px;
+}
+
+@font-face {
+  font-family: "SuitSymbols";
+  src: url("assets/fonts/DejaVuSans.ttf") format("truetype");
+  font-display: swap;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Baskerville", "Garamond", "Palatino Linotype", serif;
+  color: var(--paper);
+  background: radial-gradient(circle at 20% 20%, #1f6b4a, var(--felt-dark)),
+    linear-gradient(135deg, #0a1f17, #134b33 60%);
+}
+
+.table {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: var(--gap);
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  border-radius: 12px;
+  background: rgba(8, 28, 20, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+h1 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 1px;
+}
+
+.subtitle {
+  margin: 2px 0 0;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.status {
+  text-align: center;
+}
+
+.message {
+  font-size: 14px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  display: inline-block;
+}
+
+.score {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--accent);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 0 4px 10px var(--shadow);
+}
+
+button.active {
+  background: var(--danger);
+  color: #fff;
+}
+
+.panel {
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(8, 28, 20, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.panel h2 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+}
+
+.panel h3 {
+  margin: 0 0 4px 0;
+  font-size: 12px;
+}
+
+/* Opponent row */
+.opponent-row {
+  display: flex;
+  gap: var(--gap);
+  flex-shrink: 0;
+}
+
+.opponent-row .panel.opponent {
+  flex: 1;
+}
+
+.opponent-row .log {
+  width: 200px;
+  flex-shrink: 0;
+}
+
+.opponent-row .log ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  max-height: 60px;
+  overflow-y: auto;
+}
+
+/* Center area */
+.center-area {
+  flex: 1;
+  display: flex;
+  gap: var(--gap);
+  min-height: 0;
+}
+
+.piles-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px;
+}
+
+.pile {
+  text-align: center;
+}
+
+.pile-label {
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.pile-card {
+  width: 95px;
+  height: 120px;
+  border-radius: var(--card-radius);
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid #222;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 10px var(--shadow);
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.pile-card.back {
+  background: #1f3b6e;
+  color: #fff;
+  font-size: 14px;
+}
+
+.melds-section {
+  flex: 1;
+  display: flex;
+  gap: var(--gap);
+  min-width: 0;
+}
+
+.meld-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.meld-grid {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  align-content: flex-start;
+  overflow-y: auto;
+}
+
+.meld {
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.meld .card {
+  width: 95px;
+  height: 120px;
+  font-size: 10px;
+}
+
+.meld .card .suit {
+  font-size: 14px;
+}
+
+/* Your hand row */
+.your-row {
+  flex-shrink: 0;
+}
+
+.your-row .panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.your-row h2 {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.dev-tools {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.hand {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  flex: 1;
+}
+
+.card {
+  width: 95px;
+  height: 120px;
+  border-radius: var(--card-radius);
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid #222;
+  padding: 6px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  font-family: "Baskerville", "Garamond", "Palatino Linotype", serif;
+  box-shadow: 0 4px 10px var(--shadow);
+  cursor: grab;
+  flex-shrink: 0;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.card .suit {
+  font-family: "SuitSymbols", "Baskerville", "Garamond", serif;
+  font-size: 36px;
+  text-align: center;
+}
+
+.card.joker .suit {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.card.red {
+  color: var(--danger);
+}
+
+.card.selected {
+  outline: 2px solid var(--accent);
+  transform: translateY(-3px);
+}
+
+.card.back {
+  background: #1f3b6e;
+  color: #fff;
+  justify-content: center;
+  align-items: center;
+  text-transform: uppercase;
+  font-size: 10px;
+}

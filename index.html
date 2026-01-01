@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chinese Rummy - Mini-Game 1</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="table">
+      <header class="topbar">
+        <div>
+          <h1>Chinese Rummy</h1>
+          <p class="subtitle">Mini-Game 1 Prototype</p>
+        </div>
+        <div class="status">
+          <div id="message" class="message">Your turn: draw from deck or discard.</div>
+          <div id="score" class="score">You: 0 | Opponent: 0</div>
+        </div>
+        <div class="controls">
+          <button id="laydown-btn" type="button">Lay Down</button>
+          <button id="layoff-btn" type="button">Lay Off</button>
+          <button id="restart-btn" type="button">Restart</button>
+        </div>
+      </header>
+
+      <div class="opponent-row">
+        <section class="panel opponent">
+          <h2>Opponent</h2>
+          <div id="opponent-hand" class="hand"></div>
+        </section>
+        <section class="panel log">
+          <h3>Opponent Log</h3>
+          <ul id="opponent-log"></ul>
+        </section>
+      </div>
+
+      <div class="center-area">
+        <section class="panel piles-section">
+          <div class="pile" id="draw-pile" data-pile="draw">
+            <div class="pile-label">Draw</div>
+            <div class="pile-card back">Deck</div>
+          </div>
+          <div class="pile" id="discard-pile" data-pile="discard">
+            <div class="pile-label">Discard</div>
+            <div class="pile-card" id="discard-card">Empty</div>
+          </div>
+        </section>
+        <section class="panel melds-section">
+          <div class="meld-area">
+            <h3>Opponent Melds</h3>
+            <div id="opponent-melds" class="meld-grid"></div>
+          </div>
+          <div class="meld-area">
+            <h3>Your Melds</h3>
+            <div id="your-melds" class="meld-grid"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="your-row">
+        <section class="panel you">
+          <h2>Your Hand</h2>
+          <div id="your-hand" class="hand"></div>
+          <div class="dev-tools">
+            <label><input id="dev-mode" type="checkbox" /> Dev mode</label>
+          </div>
+        </section>
+      </div>
+    </div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

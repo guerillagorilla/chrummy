@@ -1,24 +1,23 @@
 # Checklist
 
-1. Create web folder structure
+1. [x] Create web folder structure
 
-- web/
-- web/index.html
-- web/styles.css
-- web/app.js
-- web/engine/
-- web/engine/gameEngine.js
-- web/engine/ai.js
-- web/assets/fonts/
+- index.html
+- styles.css
+- app.js
+- engine/
+- engine/gameEngine.js
+- engine/ai.js
+- assets/fonts/
 
-2. Choose rendering method
+2. [x] Choose rendering method
 
 - Decide: Canvas (single draw loop) or DOM (card divs + drag/drop).
 - If unsure, pick DOM for faster dev + easier drag/drop.
 
-3. Port core game rules
+3. [x] Port core game rules
 
-- Translate game_engine.py into gameEngine.js.
+- Ensure core rules are fully represented in gameEngine.js.
 - Include:
   - Deck, Card, wild checks
   - Deal rules
@@ -28,13 +27,13 @@
   - Scoring and totals
   - Reshuffle logic
 
-4. Port AI
+4. [x] Port AI
 
 - Translate ai_choose_discard + draw behavior into ai.js.
 - Keep "don't feed opponent" rule.
 - Keep "never discard wilds unless forced."
 
-5. UI wireframe
+5. [x] UI wireframe
 
 - Header: title, current message, score
 - Left: opponent hand, opponent log
@@ -42,30 +41,30 @@
 - Middle: meld areas (opponent + yours)
 - Bottom: your hand (draggable)
 
-6. Implement UI interactions
+6. [x] Implement UI interactions
 
 - Draw: click/double-click deck or discard
 - Lay down: button or key
 - Lay off: click card then meld
 - Discard: double-click card
 
-7. Dev-only features
+7. [x] Dev-only features
 
 - "Show opponent hand" toggle
 - "Show drawn card from deck" log
 - "Dev mode" flag
 
-8. Font setup
+8. [x] Font setup
 
 - Add a suit-compatible font to assets/fonts
 - Use @font-face in CSS to render suits consistently
 
-9. Parity testing
+9. [ ] Parity testing
 
-- Run several rounds and compare behavior to the Pygame version.
-- Verify scoring and AI match rules.md.
+- Run several rounds and compare behavior against the rules (bothj player and opponent behaviors).
+- Verify scoring and AI match docs/rules.md.
 
-10. Optional later
+10. [ ] Optional later
 
 - Add WebSocket server for multiplayer
 - Add lobby / player names / turn animations
@@ -74,14 +73,13 @@
 
 Suggested Web Layout
 
-web/
-  index.html
-  styles.css
-  app.js
-  engine/
-    gameEngine.js
-    ai.js
-    rules.js
-  assets/
-    fonts/
-      DejaVuSans.ttf (or NotoSansSymbols.ttf)
+index.html
+styles.css
+app.js
+engine/
+  gameEngine.js
+  ai.js
+  rules.js
+assets/
+  fonts/
+    DejaVuSans.ttf (or NotoSansSymbols.ttf)
