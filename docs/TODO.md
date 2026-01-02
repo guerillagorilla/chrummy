@@ -74,6 +74,13 @@
 
 Multiplayer Outline (Draft)
 
+Status (WIP):
+
+- WebSocket server wired into `scripts/dev_server.mjs`.
+- Client can create/join rooms from the header controls.
+- State is authoritative on the server; client sends actions only.
+- Basic disconnect handling (room slot freed; rejoin allowed).
+
 1. WebSocket Server (Recommended)
 
 - Node.js server holds authoritative game state

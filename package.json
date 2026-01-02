@@ -4,5 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev_server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
   }
 }
