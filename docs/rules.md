@@ -51,6 +51,7 @@
   - If discard matches a rank already in AI’s hand, take it. (Rank = face value: A, 2, 3, …, 10, J, Q, K.)
   - If discard matches a rank in AI’s melds, take it.
   - If discard matches a rank in opponent’s melds, take it (deny).
+- Once AI has laid down, it only takes discard if the top card can be laid off immediately.
 - Otherwise draws from the deck.
 
 ### Lay down / lay off

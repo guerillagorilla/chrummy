@@ -1,4 +1,5 @@
 import { Game, SuitSymbols, JokerRank } from "./engine/gameEngine.js";
+import { aiTurn as aiTurnEngine } from "./engine/ai.js";
 import { aiTurn } from "./engine/ai.js";
 
 const messageEl = document.getElementById("message");
@@ -276,6 +277,30 @@ function runAiTurn() {
   renderAll();
 }
 
+function runPlayerAiTurn() {
+  if (state !== "await_draw" && state !== "await_discard") return;
+  const result = aiTurnEngine(game, 0);
+  if (result.drewCard) {
+    playSound("draw");
+  }
+  if (result.log.some((entry) => entry.includes("Laid down") || entry.includes("Laid off"))) {
+    playSound("play");
+  }
+  if (result.discarded) {
+    playSound("discard");
+  }
+  if (game.checkWinAfterDiscard(game.players[0])) {
+    game.applyRoundScores(0);
+    setMessage("You win! Press Restart to play again.");
+    state = "game_over";
+    renderAll();
+    return;
+  }
+  state = "ai_turn";
+  renderAll();
+  setTimeout(runAiTurn, 600);
+}
+
 laydownBtn.addEventListener("click", () => {
   if (state !== "await_discard") return;
   if (game.tryLayDown(game.players[0])) {
@@ -537,4 +562,5 @@ if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
   events.onmessage = () => {
     window.location.reload();
   };
+  window.autoPlayStep = runPlayerAiTurn;
 }

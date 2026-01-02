@@ -3,6 +3,7 @@
 
 (function() {
   let intervalId = null;
+  let lastHandledMessage = "";
   
   function autoPlay(speed = 800) {
     if (intervalId) {
@@ -12,18 +13,30 @@
     
     intervalId = setInterval(() => {
       const msg = document.querySelector('#message')?.textContent || "";
+      if (!msg || msg === lastHandledMessage) {
+        return;
+      }
       
+      // Prefer AI-based autoplay if available
+      if (typeof window.autoPlayStep === "function") {
+        window.autoPlayStep();
+        lastHandledMessage = msg;
+        return;
+      }
+
       // Check game over
       if (msg.includes('wins')) {
         console.log("Game over! Restarting...");
         setTimeout(() => {
           document.getElementById('restart-btn')?.click();
         }, 1000);
+        lastHandledMessage = msg;
         return;
       }
       
       // Check if it's opponent's turn (AI) - just wait
       if (msg.includes('Opponent')) {
+        lastHandledMessage = msg;
         return;
       }
       
@@ -32,11 +45,12 @@
         document.getElementById('draw-pile')?.dispatchEvent(
           new MouseEvent('dblclick', {bubbles: true})
         );
+        lastHandledMessage = msg;
         return;
       }
       
       // Discard phase
-      if (msg.includes('discard') || msg.includes('Discard')) {
+      if (msg.includes('discard') || msg.includes('Discard') || msg.startsWith('You drew')) {
         // Try lay down first
         document.getElementById('laydown-btn')?.click();
         
@@ -47,6 +61,7 @@
             cards[0].dispatchEvent(new MouseEvent('dblclick', {bubbles: true}));
           }
         }, 100);
+        lastHandledMessage = msg;
         return;
       }
     }, speed);

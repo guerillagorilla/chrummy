@@ -3,9 +3,11 @@ import { JokerRank } from "./gameEngine.js";
 export function chooseDrawSource(game, playerIndex) {
   const topDiscard = game.discardPile[game.discardPile.length - 1];
   if (!topDiscard) return "deck";
+  const player = game.players[playerIndex];
+  if (player.hasLaidDown && !game.canLayOffCard(topDiscard)) return "deck";
   if (topDiscard.rank === "2" || topDiscard.rank === JokerRank) return "discard";
 
-  const handRanks = new Set(game.players[playerIndex].hand.map((card) => card.rank));
+  const handRanks = new Set(player.hand.map((card) => card.rank));
   const ownMeldRanks = game.meldRanksFor(playerIndex);
   const opponentMeldRanks = game.opponentMeldRanks(playerIndex);
 
