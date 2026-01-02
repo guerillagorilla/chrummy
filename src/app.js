@@ -544,6 +544,35 @@ function sendSocket(payload) {
   }
 }
 
+function totalMeldCards(melds) {
+  return melds.reduce((sum, meld) => sum + meld.cards.length, 0);
+}
+
+function maybePlayMultiplayerSounds(prevState, nextState) {
+  if (!prevState) return;
+
+  const prevPhase = prevState.phase;
+  const nextPhase = nextState.phase;
+
+  if (prevPhase === "await_draw" && nextPhase === "await_discard") {
+    playSound("draw");
+  }
+
+  const prevDiscard = prevState.discardTop?.cid;
+  const nextDiscard = nextState.discardTop?.cid;
+  if (prevPhase === "await_discard" && (nextPhase === "await_draw" || nextPhase === "game_over")) {
+    if (prevDiscard !== nextDiscard) {
+      playSound("discard");
+    }
+  }
+
+  const prevMeldCards = totalMeldCards(prevState.you.melds) + totalMeldCards(prevState.opponent.melds);
+  const nextMeldCards = totalMeldCards(nextState.you.melds) + totalMeldCards(nextState.opponent.melds);
+  if (nextMeldCards > prevMeldCards) {
+    playSound("play");
+  }
+}
+
 function handleSocketMessage(event) {
   let msg;
   try {
@@ -585,7 +614,9 @@ function handleSocketMessage(event) {
   }
 
   if (msg.type === "state") {
+    const prevState = multiplayerState;
     multiplayerState = msg;
+    maybePlayMultiplayerSounds(prevState, multiplayerState);
     setMultiplayerEnabled(true);
     resetSelections();
     renderAll();
