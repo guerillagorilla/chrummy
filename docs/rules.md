@@ -25,7 +25,7 @@
 - A player may lay off a card onto any existing meld (their own or opponent’s).
 - A player may only lay off after they have laid down their required melds.
 - Lay offs only happen on your turn.
-- Wilds can be laid off without the 50% natural rule.
+- After laying down, the 50% natural rule no longer applies to lay offs. Wilds (2s/Jokers) can be added to any meld (yours or an opponent’s) that can accept them.
 - If you lay off onto opponent’s meld, the card leaves your hand.
 
 ## Reshuffle
