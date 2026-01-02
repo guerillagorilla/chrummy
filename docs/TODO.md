@@ -22,7 +22,7 @@
   - Deck, Card, wild checks
   - Deal rules
   - Draw/Discard piles
-  - Lay down validation (two 3-of-a-kinds, 50% natural)
+  - Round-based lay down validation (round-specific meld types, 50% natural)
   - Lay off to melds
   - Scoring and totals
   - Reshuffle logic

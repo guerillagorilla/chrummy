@@ -30,7 +30,7 @@ Open `http://localhost:8000` in a browser.
 
 ## Rules
 
-See `docs/rules.md` for detailed gameplay rules and AI behavior notes.
+See `docs/rules.md` for detailed gameplay rules, including the 7-round progression and AI behavior notes.
 
 ## Controls (Web)
 

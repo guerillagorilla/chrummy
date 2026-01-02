@@ -1,4 +1,4 @@
-import { JokerRank } from "./gameEngine.js";
+import { JokerRank, formatRequirements } from "./gameEngine.js";
 
 export function chooseDrawSource(game, playerIndex) {
   const topDiscard = game.discardPile[game.discardPile.length - 1];
@@ -67,7 +67,8 @@ export function aiTurn(game, playerIndex) {
   }
 
   if (game.tryLayDown(player)) {
-    log.push("Laid down two 3-of-a-kinds.");
+    const summary = formatRequirements(game.currentRound().requirements);
+    log.push(`Laid down ${summary}.`);
   }
 
   const moved = game.layOffAll(player);

@@ -48,7 +48,12 @@ function cardPayload(card) {
 }
 
 function meldPayload(meld) {
-  return { rank: meld.rank, cards: meld.cards.map(cardPayload) };
+  return {
+    type: meld.type,
+    rank: meld.rank,
+    suit: meld.suit ?? null,
+    cards: meld.cards.map(cardPayload),
+  };
 }
 
 function stateForPlayer(room, playerIndex) {
@@ -63,6 +68,8 @@ function stateForPlayer(room, playerIndex) {
     phase: room.phase,
     currentPlayerIndex: game.currentPlayerIndex,
     winnerIndex: room.winnerIndex,
+    roundIndex: game.roundIndex,
+    round: game.currentRound(),
     opponentConnected: opponentSocket?.readyState === WebSocket.OPEN,
     drawCount: game.drawPile.length,
     discardTop: cardPayload(game.discardPile[game.discardPile.length - 1]),
@@ -369,7 +376,7 @@ wss.on("connection", (socket) => {
           return;
         }
         room.game.dealerIndex = (room.game.dealerIndex + 1) % 2;
-        room.game.startRound();
+        room.game.nextRound();
         room.phase = "await_draw";
         room.winnerIndex = null;
         broadcastState(room);

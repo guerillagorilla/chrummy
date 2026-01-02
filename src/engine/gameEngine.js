@@ -1,6 +1,102 @@
 const SUITS = ["spades", "hearts", "diamonds", "clubs"];
 const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
 const JOKER = "JOKER";
+const RANK_VALUES = {
+  "2": 2,
+  "3": 3,
+  "4": 4,
+  "5": 5,
+  "6": 6,
+  "7": 7,
+  "8": 8,
+  "9": 9,
+  "10": 10,
+  J: 11,
+  Q: 12,
+  K: 13,
+  A: 14,
+};
+
+export const ROUNDS = [
+  {
+    handSize: 7,
+    requirements: [
+      { type: "set", size: 3 },
+      { type: "set", size: 3 },
+    ],
+  },
+  {
+    handSize: 8,
+    requirements: [
+      { type: "set", size: 3 },
+      { type: "run", size: 4 },
+    ],
+  },
+  {
+    handSize: 9,
+    requirements: [
+      { type: "run", size: 4 },
+      { type: "run", size: 4 },
+    ],
+  },
+  {
+    handSize: 10,
+    requirements: [
+      { type: "set", size: 4 },
+      { type: "set", size: 5 },
+    ],
+  },
+  {
+    handSize: 11,
+    requirements: [
+      { type: "run", size: 7 },
+      { type: "set", size: 3 },
+    ],
+  },
+  {
+    handSize: 12,
+    requirements: [
+      { type: "set", size: 3 },
+      { type: "set", size: 3 },
+      { type: "run", size: 4 },
+    ],
+  },
+  {
+    handSize: 12,
+    requirements: [
+      { type: "run", size: 4 },
+      { type: "run", size: 4 },
+      { type: "set", size: 3 },
+    ],
+  },
+];
+
+function joinWithAnd(parts) {
+  if (parts.length <= 1) return parts[0] ?? "";
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+}
+
+export function formatRequirements(requirements = []) {
+  const groups = [];
+  for (const req of requirements) {
+    const key = `${req.type}:${req.size}`;
+    const existing = groups.find((group) => group.key === key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      groups.push({ key, req, count: 1 });
+    }
+  }
+  const parts = groups.map(({ req, count }) => {
+    const isSet = req.type === "set";
+    const label = isSet ? `${req.size}-of-a-kind` : `${req.size}-card straight flush`;
+    if (count === 1) return label;
+    const plural = isSet ? "s" : "es";
+    return `${count} ${label}${plural}`;
+  });
+  return joinWithAnd(parts);
+}
 
 let nextId = 1;
 
@@ -29,13 +125,18 @@ export class Card {
 }
 
 export class Meld {
-  constructor(rank, cards) {
+  constructor({ type, rank = null, suit = null, cards }) {
+    this.type = type;
     this.rank = rank;
+    this.suit = suit;
     this.cards = cards;
   }
 
   canAdd(card) {
-    return card.isWild() || card.rank === this.rank;
+    if (this.type === "run") {
+      return canFormRun([...this.cards, card], false);
+    }
+    return canFormSet([...this.cards, card], false);
   }
 
   add(card) {
@@ -98,39 +199,109 @@ export class Deck {
   }
 }
 
-function meldCandidates(hand) {
-  const candidates = [];
-  for (let i = 0; i < hand.length - 2; i += 1) {
-    for (let j = i + 1; j < hand.length - 1; j += 1) {
-      for (let k = j + 1; k < hand.length; k += 1) {
-        const trio = [hand[i], hand[j], hand[k]];
-        const wilds = trio.filter((card) => card.isWild());
-        const naturals = trio.filter((card) => !card.isWild());
-        if (naturals.length < 2) continue;
-        const ranks = new Set(naturals.map((card) => card.rank));
-        if (ranks.size !== 1) continue;
-        if (wilds.length > 1) continue;
-        const rank = Array.from(ranks)[0];
-        candidates.push({ cards: trio, rank });
-      }
+function combinations(items, size) {
+  const results = [];
+  const combo = [];
+  function backtrack(start, remaining) {
+    if (remaining === 0) {
+      results.push([...combo]);
+      return;
+    }
+    for (let i = start; i <= items.length - remaining; i += 1) {
+      combo.push(items[i]);
+      backtrack(i + 1, remaining - 1);
+      combo.pop();
     }
   }
-  return candidates;
+  backtrack(0, size);
+  return results;
+}
+
+function canFormSet(cards, requireHalfNatural) {
+  const naturals = cards.filter((card) => !card.isWild());
+  if (requireHalfNatural && naturals.length < Math.ceil(cards.length / 2)) return false;
+  if (naturals.length === 0) return !requireHalfNatural;
+  const rank = naturals[0].rank;
+  return naturals.every((card) => card.rank === rank);
+}
+
+function canFormRun(cards, requireHalfNatural) {
+  const naturals = cards.filter((card) => !card.isWild());
+  if (requireHalfNatural && naturals.length < Math.ceil(cards.length / 2)) return false;
+  let suit = null;
+  const naturalValues = [];
+  for (const card of naturals) {
+    if (suit && card.suit !== suit) return false;
+    suit = card.suit;
+    naturalValues.push(RANK_VALUES[card.rank]);
+  }
+  const naturalSet = new Set(naturalValues);
+  if (naturalSet.size !== naturalValues.length) return false;
+  if (naturals.length === 0) return !requireHalfNatural;
+  const size = cards.length;
+  for (let start = 2; start <= 14 - size + 1; start += 1) {
+    const needed = new Set();
+    for (let offset = 0; offset < size; offset += 1) {
+      needed.add(start + offset);
+    }
+    const allInRange = naturalValues.every((value) => needed.has(value));
+    if (allInRange) return true;
+  }
+  return false;
+}
+
+function makeMeld(requirement, cards) {
+  if (requirement.type === "set") {
+    const natural = cards.find((card) => !card.isWild());
+    return new Meld({
+      type: "set",
+      rank: natural ? natural.rank : null,
+      cards: [...cards],
+    });
+  }
+  const natural = cards.find((card) => !card.isWild());
+  return new Meld({
+    type: "run",
+    suit: natural ? natural.suit : null,
+    cards: [...cards],
+  });
+}
+
+function findMeldOptions(hand, requirement) {
+  const options = [];
+  for (const combo of combinations(hand, requirement.size)) {
+    if (requirement.type === "set" && canFormSet(combo, true)) {
+      options.push(makeMeld(requirement, combo));
+    }
+    if (requirement.type === "run" && canFormRun(combo, true)) {
+      options.push(makeMeld(requirement, combo));
+    }
+  }
+  return options;
+}
+
+function findMeldsForRequirements(hand, requirements) {
+  const options = requirements.map((req) => findMeldOptions(hand, req));
+  const used = new Set();
+
+  function backtrack(reqIndex) {
+    if (reqIndex === requirements.length) return [];
+    for (const meld of options[reqIndex]) {
+      const meldIds = meld.cards.map((card) => card.cid);
+      if (meldIds.some((cid) => used.has(cid))) continue;
+      meldIds.forEach((cid) => used.add(cid));
+      const rest = backtrack(reqIndex + 1);
+      if (rest) return [meld, ...rest];
+      meldIds.forEach((cid) => used.delete(cid));
+    }
+    return null;
+  }
+
+  return backtrack(0);
 }
 
 export function findTwoMelds(hand) {
-  const candidates = meldCandidates(hand);
-  for (const first of candidates) {
-    const firstIds = new Set(first.cards.map((card) => card.cid));
-    for (const second of candidates) {
-      const secondIds = new Set(second.cards.map((card) => card.cid));
-      const disjoint = [...firstIds].every((cid) => !secondIds.has(cid));
-      if (disjoint) {
-        return [new Meld(first.rank, [...first.cards]), new Meld(second.rank, [...second.cards])];
-      }
-    }
-  }
-  return null;
+  return findMeldsForRequirements(hand, ROUNDS[0].requirements);
 }
 
 export class Game {
@@ -144,6 +315,7 @@ export class Game {
     this.drawPile = [];
     this.discardPile = [];
     this.playersCount = players;
+    this.roundIndex = 0;
     this.startRound();
   }
 
@@ -161,7 +333,8 @@ export class Game {
     const start = (this.dealerIndex + 1) % this.players.length;
     const dealOrder = order.slice(start).concat(order.slice(0, start));
 
-    for (let round = 0; round < 7; round += 1) {
+    const currentRound = this.currentRound();
+    for (let round = 0; round < currentRound.handSize; round += 1) {
       for (const idx of dealOrder) {
         this.players[idx].hand.push(...deck.deal(1));
       }
@@ -173,6 +346,17 @@ export class Game {
       this.discardPile.push(this.drawPile.shift());
     }
     this.currentPlayerIndex = start;
+  }
+
+  currentRound() {
+    return ROUNDS[this.roundIndex] ?? ROUNDS[0];
+  }
+
+  nextRound() {
+    if (this.roundIndex < ROUNDS.length - 1) {
+      this.roundIndex += 1;
+    }
+    this.startRound();
   }
 
   currentPlayer() {
@@ -207,7 +391,7 @@ export class Game {
 
   tryLayDown(player) {
     if (player.hasLaidDown) return false;
-    const melds = findTwoMelds(player.hand);
+    const melds = findMeldsForRequirements(player.hand, this.currentRound().requirements);
     if (!melds) return false;
     for (const meld of melds) {
       for (const card of meld.cards) {
@@ -266,7 +450,15 @@ export class Game {
   meldRanksFor(playerIndex) {
     const ranks = new Set();
     for (const meld of this.players[playerIndex].melds) {
-      ranks.add(meld.rank);
+      if (meld.type === "set" && meld.rank) {
+        ranks.add(meld.rank);
+        continue;
+      }
+      for (const card of meld.cards) {
+        if (!card.isWild()) {
+          ranks.add(card.rank);
+        }
+      }
     }
     return ranks;
   }
@@ -276,7 +468,15 @@ export class Game {
     for (let idx = 0; idx < this.players.length; idx += 1) {
       if (idx === playerIndex) continue;
       for (const meld of this.players[idx].melds) {
-        ranks.add(meld.rank);
+        if (meld.type === "set" && meld.rank) {
+          ranks.add(meld.rank);
+          continue;
+        }
+        for (const card of meld.cards) {
+          if (!card.isWild()) {
+            ranks.add(card.rank);
+          }
+        }
       }
     }
     return ranks;

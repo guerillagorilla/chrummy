@@ -1,4 +1,4 @@
-import { Game, SuitSymbols, JokerRank } from "./engine/gameEngine.js";
+import { Game, SuitSymbols, JokerRank, formatRequirements, ROUNDS } from "./engine/gameEngine.js";
 import { aiTurn as aiTurnEngine } from "./engine/ai.js";
 import { aiTurn } from "./engine/ai.js";
 
@@ -44,6 +44,21 @@ const soundFiles = {
 const sounds = Object.fromEntries(
   Object.entries(soundFiles).map(([key, src]) => [key, new Audio(src)]),
 );
+const RANK_VALUES = {
+  "2": 2,
+  "3": 3,
+  "4": 4,
+  "5": 5,
+  "6": 6,
+  "7": 7,
+  "8": 8,
+  "9": 9,
+  "10": 10,
+  J: 11,
+  Q: 12,
+  K: 13,
+  A: 14,
+};
 
 function setMessage(text, state = "normal") {
   messageEl.textContent = text;
@@ -71,6 +86,8 @@ function buildLocalView() {
     phase: state,
     currentPlayerIndex: state === "ai_turn" ? 1 : 0,
     winnerIndex: null,
+    roundIndex: game.roundIndex,
+    round: game.currentRound(),
     drawCount: game.drawPile.length,
     discardTop: game.discardPile[game.discardPile.length - 1] ?? null,
     you: {
@@ -125,7 +142,11 @@ function getOpponentMelds() {
 
 function updateScore() {
   const view = getView();
-  scoreEl.textContent = `You: ${view.you.totalScore} | Opponent: ${view.opponent.totalScore}`;
+  const roundIndex = Number.isFinite(view.roundIndex) ? view.roundIndex : 0;
+  const roundTotal = ROUNDS.length;
+  const roundSummary = view.round ? formatRequirements(view.round.requirements) : "";
+  const roundLabel = roundSummary ? `Round ${roundIndex + 1}/${roundTotal}: ${roundSummary}` : `Round ${roundIndex + 1}/${roundTotal}`;
+  scoreEl.textContent = `${roundLabel} | You: ${view.you.totalScore} | Opponent: ${view.opponent.totalScore}`;
 }
 
 function logOpponent(text) {
@@ -155,7 +176,36 @@ function cardIsWild(card) {
 function meldCanAdd(meld, card) {
   if (!meld || !card) return false;
   if (typeof meld.canAdd === "function") return meld.canAdd(card);
+  if (meld.type === "run") {
+    return canFormRun([...meld.cards, card], false);
+  }
   return cardIsWild(card) || meld.rank === card.rank;
+}
+
+function canFormRun(cards, requireHalfNatural) {
+  const naturals = cards.filter((candidate) => !cardIsWild(candidate));
+  if (requireHalfNatural && naturals.length < Math.ceil(cards.length / 2)) return false;
+  let suit = null;
+  const values = [];
+  for (const card of naturals) {
+    if (suit && card.suit !== suit) return false;
+    suit = card.suit;
+    values.push(RANK_VALUES[card.rank]);
+  }
+  const unique = new Set(values);
+  if (unique.size !== values.length) return false;
+  if (naturals.length === 0) return !requireHalfNatural;
+  const size = cards.length;
+  for (let start = 2; start <= 14 - size + 1; start += 1) {
+    const needed = new Set();
+    for (let offset = 0; offset < size; offset += 1) {
+      needed.add(start + offset);
+    }
+    if (values.every((value) => needed.has(value))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function renderCard(card, options = {}) {
@@ -285,7 +335,7 @@ function resetSelections() {
 
 function startRound() {
   if (multiplayerEnabled) return;
-  game.startRound();
+  game.nextRound();
   state = "await_draw";
   resetSelections();
   revealOpponentCardId = null;
@@ -438,10 +488,12 @@ laydownBtn.addEventListener("click", () => {
   }
   if (state !== "await_discard") return;
   if (game.tryLayDown(game.players[0])) {
-    setMessage("You laid down two 3-of-a-kinds.");
+    const summary = formatRequirements(game.currentRound().requirements);
+    setMessage(`You laid down ${summary}.`);
     playSound("play");
   } else {
-    setMessage("No valid two 3-of-a-kinds.");
+    const summary = formatRequirements(game.currentRound().requirements);
+    setMessage(`No valid ${summary}.`);
   }
   renderAll();
 });
@@ -454,6 +506,10 @@ restartBtn.addEventListener("click", () => {
       return;
     }
     sendAction("restart");
+    return;
+  }
+  if (state !== "game_over") {
+    setMessage("Finish the round before restarting.");
     return;
   }
   startRound();
