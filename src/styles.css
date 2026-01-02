@@ -241,6 +241,28 @@ button.active {
   flex-direction: column;
 }
 
+.meld-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+#laydown-selected-btn {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--paper);
+}
+
+#laydown-selected-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .meld-grid {
   flex: 1;
   display: flex;
@@ -263,6 +285,16 @@ button.active {
   min-width: 130px;
   border: 2px solid transparent;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.meld.staged {
+  border-style: dashed;
+  border-color: rgba(216, 178, 90, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.meld.staged .card {
+  opacity: 0.85;
 }
 
 .meld.drop-valid {
@@ -325,6 +357,8 @@ button.active {
 .dev-tools {
   font-size: 12px;
   white-space: nowrap;
+  display: flex;
+  gap: 12px;
 }
 
 .hand {
@@ -332,6 +366,7 @@ button.active {
   gap: 6px;
   overflow-x: auto;
   flex: 1;
+  position: relative;
 }
 
 .card {
@@ -356,6 +391,24 @@ button.active {
   font-family: "SuitSymbols", "Baskerville", "Garamond", serif;
   font-size: 36px;
   text-align: center;
+}
+
+.insert-marker {
+  position: absolute;
+  top: 0;
+  width: 4px;
+  height: 120px;
+  background: var(--accent);
+  border-radius: 2px;
+  box-shadow: 0 0 10px rgba(216, 178, 90, 0.7);
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.insert-marker.active {
+  opacity: 1;
 }
 
 .card.joker .suit {

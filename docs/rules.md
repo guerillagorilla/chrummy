@@ -12,6 +12,7 @@
 - After drawing, you may lay down and/or lay off (once you have laid down), then must discard exactly one card to end your turn.
 - Win condition: a player wins the round when they reach 0 cards (after lay down/lay off/discard).
 - After each round, the next round’s meld requirements apply.
+- Only the top discard is ever available. Any card covered by a new discard is dead and cannot be picked up later.
 
 ## Melds and Lay Downs
 

@@ -149,6 +149,7 @@ export class Player {
     this.name = name;
     this.hand = [];
     this.melds = [];
+    this.stagedMelds = [];
     this.hasLaidDown = false;
     this.totalScore = 0;
   }
@@ -314,6 +315,7 @@ export class Game {
     this.currentPlayerIndex = 0;
     this.drawPile = [];
     this.discardPile = [];
+    this.deadPile = [];
     this.playersCount = players;
     this.roundIndex = 0;
     this.startRound();
@@ -326,8 +328,10 @@ export class Game {
     for (const player of this.players) {
       player.hand = [];
       player.melds = [];
+      player.stagedMelds = [];
       player.hasLaidDown = false;
     }
+    this.deadPile = [];
 
     const order = [...Array(this.players.length).keys()];
     const start = (this.dealerIndex + 1) % this.players.length;
@@ -386,6 +390,10 @@ export class Game {
 
   discard(player, card) {
     player.hand = player.hand.filter((c) => c.cid !== card.cid);
+    if (this.discardPile.length > 0) {
+      this.deadPile.push(...this.discardPile);
+      this.discardPile = [];
+    }
     this.discardPile.push(card);
   }
 
@@ -399,6 +407,106 @@ export class Game {
       }
       player.melds.push(meld);
     }
+    player.hasLaidDown = true;
+    return true;
+  }
+
+  tryLayDownWithCards(player, cards) {
+    if (player.hasLaidDown) return false;
+    const requirements = this.currentRound().requirements;
+    const neededCount = requirements.reduce((sum, req) => sum + req.size, 0);
+    if (cards.length !== neededCount) return false;
+    const handIds = new Set(player.hand.map((card) => card.cid));
+    if (!cards.every((card) => handIds.has(card.cid))) return false;
+    const melds = findMeldsForRequirements(cards, requirements);
+    if (!melds) return false;
+    for (const meld of melds) {
+      for (const card of meld.cards) {
+        player.hand = player.hand.filter((c) => c.cid !== card.cid);
+      }
+      player.melds.push(meld);
+    }
+    player.hasLaidDown = true;
+    return true;
+  }
+
+  stageCard(player, card, meldIndex = null) {
+    const handHasCard = player.hand.some((c) => c.cid === card.cid);
+    if (!handHasCard) return false;
+    player.hand = player.hand.filter((c) => c.cid !== card.cid);
+    if (meldIndex !== null && player.stagedMelds[meldIndex]) {
+      player.stagedMelds[meldIndex].cards.push(card);
+      return true;
+    }
+    player.stagedMelds.push({ cards: [card], staged: true });
+    return true;
+  }
+
+  unstageCard(player, card) {
+    for (let i = 0; i < player.stagedMelds.length; i += 1) {
+      const meld = player.stagedMelds[i];
+      const idx = meld.cards.findIndex((c) => c.cid === card.cid);
+      if (idx === -1) continue;
+      meld.cards.splice(idx, 1);
+      if (meld.cards.length === 0) {
+        player.stagedMelds.splice(i, 1);
+      }
+      player.hand.push(card);
+      return true;
+    }
+    return false;
+  }
+
+  clearStaged(player) {
+    for (const meld of player.stagedMelds) {
+      player.hand.push(...meld.cards);
+    }
+    player.stagedMelds = [];
+  }
+
+  tryLayDownStaged(player) {
+    if (player.hasLaidDown) return false;
+    const stagedMelds = player.stagedMelds;
+    const requirements = this.currentRound().requirements;
+    if (stagedMelds.length !== requirements.length) {
+      this.clearStaged(player);
+      return false;
+    }
+
+    const used = new Set();
+    const assignment = [];
+
+    function matchesRequirement(meld, req) {
+      if (meld.cards.length !== req.size) return false;
+      if (req.type === "set") return canFormSet(meld.cards, true);
+      return canFormRun(meld.cards, true);
+    }
+
+    function backtrack(reqIndex) {
+      if (reqIndex === requirements.length) return true;
+      for (let i = 0; i < stagedMelds.length; i += 1) {
+        if (used.has(i)) continue;
+        const requirement = requirements[reqIndex];
+        if (!matchesRequirement(stagedMelds[i], requirement)) continue;
+        used.add(i);
+        assignment.push({ meld: stagedMelds[i], requirement });
+        if (backtrack(reqIndex + 1)) return true;
+        assignment.pop();
+        used.delete(i);
+      }
+      return false;
+    }
+
+    if (!backtrack(0)) {
+      this.clearStaged(player);
+      return false;
+    }
+
+    for (const { meld, requirement } of assignment) {
+      const committed = makeMeld({ type: requirement.type }, meld.cards);
+      player.melds.push(committed);
+    }
+    player.stagedMelds = [];
     player.hasLaidDown = true;
     return true;
   }

@@ -53,6 +53,7 @@ function meldPayload(meld) {
     rank: meld.rank,
     suit: meld.suit ?? null,
     cards: meld.cards.map(cardPayload),
+    staged: Boolean(meld.staged),
   };
 }
 
@@ -76,12 +77,14 @@ function stateForPlayer(room, playerIndex) {
     you: {
       hand: you.hand.map(cardPayload),
       melds: you.melds.map(meldPayload),
+      stagedMelds: you.stagedMelds.map(meldPayload),
       hasLaidDown: you.hasLaidDown,
       totalScore: you.totalScore,
     },
     opponent: {
       handCount: opponent.hand.length,
       melds: opponent.melds.map(meldPayload),
+      stagedMelds: opponent.stagedMelds.map(meldPayload),
       hasLaidDown: opponent.hasLaidDown,
       totalScore: opponent.totalScore,
     },
@@ -286,7 +289,7 @@ wss.on("connection", (socket) => {
 
     if (msg.type === "action") {
       const game = room.game;
-      if (room.phase === "game_over") {
+      if (room.phase === "game_over" && msg.action !== "restart") {
         sendError(socket, "Round is over.");
         return;
       }
@@ -317,7 +320,54 @@ wss.on("connection", (socket) => {
           sendError(socket, "Draw first.");
           return;
         }
-        game.tryLayDown(game.players[playerIndex]);
+        if (!game.tryLayDownStaged(game.players[playerIndex])) {
+          sendError(socket, "Invalid laydown.");
+          broadcastState(room);
+          return;
+        }
+        broadcastState(room);
+        return;
+      }
+
+      if (msg.action === "stage") {
+        if (room.phase !== "await_discard") {
+          sendError(socket, "Draw first.");
+          return;
+        }
+        const player = game.players[playerIndex];
+        if (player.hasLaidDown) {
+          sendError(socket, "Already laid down.");
+          return;
+        }
+        const cardId = Number(msg.cardId);
+        const meldIndex = Number.isFinite(msg.meldIndex) ? Number(msg.meldIndex) : null;
+        const card = player.hand.find((c) => c.cid === cardId);
+        if (!card) {
+          sendError(socket, "Card not in hand.");
+          return;
+        }
+        game.stageCard(player, card, meldIndex);
+        broadcastState(room);
+        return;
+      }
+
+      if (msg.action === "unstage") {
+        if (room.phase !== "await_discard") {
+          sendError(socket, "Draw first.");
+          return;
+        }
+        const player = game.players[playerIndex];
+        if (player.hasLaidDown) {
+          sendError(socket, "Already laid down.");
+          return;
+        }
+        const cardId = Number(msg.cardId);
+        const card = player.stagedMelds.flatMap((meld) => meld.cards).find((c) => c.cid === cardId);
+        if (!card) {
+          sendError(socket, "Card not staged.");
+          return;
+        }
+        game.unstageCard(player, card);
         broadcastState(room);
         return;
       }
@@ -356,6 +406,9 @@ wss.on("connection", (socket) => {
         if (!card) {
           sendError(socket, "Card not in hand.");
           return;
+        }
+        if (!player.hasLaidDown && player.stagedMelds.length > 0) {
+          game.clearStaged(player);
         }
         game.discard(player, card);
         if (game.checkWinAfterDiscard(player)) {

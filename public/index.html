@@ -12,15 +12,15 @@
       <header class="topbar">
         <div>
           <h1>Chinese Rummy</h1>
-          <p class="subtitle">Mini-Game 1 Prototype</p>
+          <p class="subtitle" id="subtitle">Round 1</p>
         </div>
         <div class="status">
           <div id="message" class="message">Your turn: draw from deck or discard.</div>
           <div id="score" class="score">You: 0 | Opponent: 0</div>
         </div>
         <div class="controls">
-          <button id="laydown-btn" type="button">Lay Down</button>
           <button id="restart-btn" type="button">Restart</button>
+          <button id="next-round-btn" type="button" class="hidden">Next Round</button>
           <div class="room-controls">
             <input id="room-code" type="text" placeholder="CODE" maxlength="4" />
             <button id="create-room" type="button">Create</button>
@@ -58,7 +58,10 @@
             <div id="opponent-melds" class="meld-grid"></div>
           </div>
           <div class="meld-area">
-            <h3>Your Melds</h3>
+            <div class="meld-header">
+              <h3>Your Melds</h3>
+              <button id="laydown-selected-btn" type="button">Lay Down Selected</button>
+            </div>
             <div id="your-melds" class="meld-grid"></div>
           </div>
         </section>

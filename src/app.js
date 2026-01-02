@@ -4,6 +4,7 @@ import { aiTurn } from "./engine/ai.js";
 
 const messageEl = document.getElementById("message");
 const scoreEl = document.getElementById("score");
+const subtitleEl = document.getElementById("subtitle");
 const opponentLogEl = document.getElementById("opponent-log");
 const drawPileEl = document.getElementById("draw-pile");
 const discardPileEl = document.getElementById("discard-pile");
@@ -12,8 +13,9 @@ const yourHandEl = document.getElementById("your-hand");
 const opponentHandEl = document.getElementById("opponent-hand");
 const yourMeldsEl = document.getElementById("your-melds");
 const opponentMeldsEl = document.getElementById("opponent-melds");
-const laydownBtn = document.getElementById("laydown-btn");
 const restartBtn = document.getElementById("restart-btn");
+const nextRoundBtn = document.getElementById("next-round-btn");
+const laydownSelectedBtn = document.getElementById("laydown-selected-btn");
 const devModeToggle = document.getElementById("dev-mode");
 const roomCodeInput = document.getElementById("room-code");
 const createRoomBtn = document.getElementById("create-room");
@@ -31,11 +33,13 @@ let multiplayerRoom = null;
 let multiplayerPlayerIndex = null;
 let socket = null;
 let multiplayerEnabled = false;
+let autoSortEnabled = false;
 
 let draggingCardId = null;
 let lastDropTargetId = null;
 let revealOpponentCardId = null;
 let revealTimer = null;
+let insertMarkerEl = null;
 const soundFiles = {
   draw: "/public/assets/sounds/cockatrice/draw.wav",
   play: "/public/assets/sounds/cockatrice/playcard.wav",
@@ -58,6 +62,13 @@ const RANK_VALUES = {
   Q: 12,
   K: 13,
   A: 14,
+};
+const SUIT_ORDER = {
+  spades: 0,
+  hearts: 1,
+  diamonds: 2,
+  clubs: 3,
+  joker: 4,
 };
 
 function setMessage(text, state = "normal") {
@@ -93,6 +104,7 @@ function buildLocalView() {
     you: {
       hand: game.players[0].hand,
       melds: game.players[0].melds,
+      stagedMelds: game.players[0].stagedMelds,
       hasLaidDown: game.players[0].hasLaidDown,
       totalScore: game.players[0].totalScore,
     },
@@ -100,6 +112,7 @@ function buildLocalView() {
       hand: game.players[1].hand,
       handCount: game.players[1].hand.length,
       melds: game.players[1].melds,
+      stagedMelds: game.players[1].stagedMelds,
       hasLaidDown: game.players[1].hasLaidDown,
       totalScore: game.players[1].totalScore,
     },
@@ -144,9 +157,13 @@ function updateScore() {
   const view = getView();
   const roundIndex = Number.isFinite(view.roundIndex) ? view.roundIndex : 0;
   const roundTotal = ROUNDS.length;
-  const roundSummary = view.round ? formatRequirements(view.round.requirements) : "";
+  const roundData = view.round ?? ROUNDS[roundIndex];
+  const roundSummary = roundData ? formatRequirements(roundData.requirements) : "";
   const roundLabel = roundSummary ? `Round ${roundIndex + 1}/${roundTotal}: ${roundSummary}` : `Round ${roundIndex + 1}/${roundTotal}`;
   scoreEl.textContent = `${roundLabel} | You: ${view.you.totalScore} | Opponent: ${view.opponent.totalScore}`;
+  if (subtitleEl) {
+    subtitleEl.textContent = roundSummary ? `Round ${roundIndex + 1}: ${roundSummary}` : `Round ${roundIndex + 1}`;
+  }
 }
 
 function logOpponent(text) {
@@ -256,15 +273,49 @@ function renderHand(container, hand, options = {}) {
     });
     container.appendChild(cardEl);
   }
+  // Re-append insert marker for your hand (it gets cleared by innerHTML)
+  if (container === yourHandEl && insertMarkerEl) {
+    container.appendChild(insertMarkerEl);
+  }
 }
 
-function renderMelds(container, melds, owner) {
+function sortHand(hand) {
+  return [...hand].sort((a, b) => {
+    const aWild = cardIsWild(a) ? 1 : 0;
+    const bWild = cardIsWild(b) ? 1 : 0;
+    if (aWild !== bWild) return aWild - bWild;
+    const aRank = a.rank === JokerRank ? 15 : RANK_VALUES[a.rank] ?? 0;
+    const bRank = b.rank === JokerRank ? 15 : RANK_VALUES[b.rank] ?? 0;
+    if (aRank !== bRank) return aRank - bRank;
+    const aSuit = SUIT_ORDER[a.suit] ?? 9;
+    const bSuit = SUIT_ORDER[b.suit] ?? 9;
+    if (aSuit !== bSuit) return aSuit - bSuit;
+    return a.cid - b.cid;
+  });
+}
+
+function renderMelds(container, playerView, owner) {
   container.innerHTML = "";
-  melds.forEach((meld, meldIndex) => {
+  const staged = playerView.stagedMelds ?? [];
+  const committed = playerView.melds ?? [];
+  staged.forEach((meld, meldIndex) => {
+    const meldEl = document.createElement("div");
+    meldEl.className = "meld staged";
+    meldEl.dataset.owner = owner;
+    meldEl.dataset.meldIndex = String(meldIndex);
+    meldEl.dataset.staged = "true";
+    meld.cards.forEach((card) => {
+      const cardEl = renderCard(card, { faceUp: true });
+      meldEl.appendChild(cardEl);
+    });
+    container.appendChild(meldEl);
+  });
+  committed.forEach((meld, meldIndex) => {
     const meldEl = document.createElement("div");
     meldEl.className = "meld";
     meldEl.dataset.owner = owner;
     meldEl.dataset.meldIndex = String(meldIndex);
+    meldEl.dataset.staged = "false";
     meld.cards.forEach((card) => {
       const cardEl = renderCard(card, { faceUp: true });
       meldEl.appendChild(cardEl);
@@ -303,7 +354,8 @@ function setSelectedHighlight(cardId) {
 
 function renderAll() {
   const view = getView();
-  renderHand(yourHandEl, view.you.hand, {
+  const handToRender = autoSortEnabled ? sortHand(view.you.hand) : view.you.hand;
+  renderHand(yourHandEl, handToRender, {
     faceUp: true,
     selectable: true,
     selectedId: selectedCardId,
@@ -321,10 +373,12 @@ function renderAll() {
     }
     opponentHandEl.appendChild(cardEl);
   }
-  renderMelds(yourMeldsEl, view.you.melds, "you");
-  renderMelds(opponentMeldsEl, view.opponent.melds, "opponent");
+  renderMelds(yourMeldsEl, view.you, "you");
+  renderMelds(opponentMeldsEl, view.opponent, "opponent");
   renderPiles(view);
   updateScore();
+  updateRoundButtons(view);
+  updateLaydownControls(view);
 }
 
 function resetSelections() {
@@ -334,6 +388,22 @@ function resetSelections() {
 }
 
 function startRound() {
+  if (multiplayerEnabled) return;
+  game.roundIndex = 0;
+  game.startRound();
+  state = "await_draw";
+  resetSelections();
+  revealOpponentCardId = null;
+  if (revealTimer) {
+    clearTimeout(revealTimer);
+    revealTimer = null;
+  }
+  opponentLogEl.innerHTML = "";
+  setMessage("Your turn: draw from deck or discard.");
+  renderAll();
+}
+
+function advanceRound() {
   if (multiplayerEnabled) return;
   game.nextRound();
   state = "await_draw";
@@ -396,13 +466,17 @@ function handlePlayerDiscard(card) {
   }
   if (state !== "await_discard") return;
   if (!card) return;
-  game.discard(game.players[0], card);
+  const player = game.players[0];
+  if (!player.hasLaidDown && player.stagedMelds.length > 0) {
+    game.clearStaged(player);
+  }
+  game.discard(player, card);
   setMessage(`You discarded ${card.rank}.`);
   playSound("discard");
   renderAll();
   if (game.checkWinAfterDiscard(game.players[0])) {
     game.applyRoundScores(0);
-    setMessage("You win! Press Restart to play again.");
+    setMessage("You win! Press Next Round to continue or Restart to reset.");
     state = "game_over";
     renderAll();
     return;
@@ -442,7 +516,7 @@ function runAiTurn() {
 
   if (game.checkWinAfterDiscard(game.players[1])) {
     game.applyRoundScores(1);
-    setMessage("Opponent wins. Press Restart to play again.");
+    setMessage("Opponent wins. Press Next Round to continue or Restart to reset.");
     state = "game_over";
   } else {
     state = "await_draw";
@@ -465,7 +539,7 @@ function runPlayerAiTurn() {
   }
   if (game.checkWinAfterDiscard(game.players[0])) {
     game.applyRoundScores(0);
-    setMessage("You win! Press Restart to play again.");
+    setMessage("You win! Press Next Round to continue or Restart to reset.");
     state = "game_over";
     renderAll();
     return;
@@ -475,37 +549,43 @@ function runPlayerAiTurn() {
   setTimeout(runAiTurn, 600);
 }
 
-laydownBtn.addEventListener("click", () => {
+laydownSelectedBtn.addEventListener("click", () => {
   if (multiplayerEnabled) {
     if (!multiplayerState) return;
-    if (!isPlayerTurn() || currentPhase() !== "await_discard") return;
     if (!multiplayerState.opponentConnected) {
       setMessage("Waiting for opponent...");
+      return;
+    }
+    if (!isPlayerTurn() || currentPhase() !== "await_discard") return;
+    const staged = multiplayerState.you.stagedMelds ?? [];
+    if (staged.length === 0) {
+      setMessage("Stage cards first.");
       return;
     }
     sendAction("laydown");
     return;
   }
   if (state !== "await_discard") return;
-  if (game.tryLayDown(game.players[0])) {
+  const player = game.players[0];
+  if (player.stagedMelds.length === 0) {
+    setMessage("Stage cards first.");
+    return;
+  }
+  if (game.tryLayDownStaged(player)) {
     const summary = formatRequirements(game.currentRound().requirements);
     setMessage(`You laid down ${summary}.`);
     playSound("play");
+    resetSelections();
   } else {
     const summary = formatRequirements(game.currentRound().requirements);
-    setMessage(`No valid ${summary}.`);
+    setMessage(`Staged cards do not form ${summary}.`);
   }
   renderAll();
 });
 
 restartBtn.addEventListener("click", () => {
   if (multiplayerEnabled) {
-    if (!multiplayerState) return;
-    if (multiplayerState.phase !== "game_over") {
-      setMessage("Finish the round before restarting.");
-      return;
-    }
-    sendAction("restart");
+    setMessage("Use Next Round or Leave.");
     return;
   }
   if (state !== "game_over") {
@@ -513,6 +593,23 @@ restartBtn.addEventListener("click", () => {
     return;
   }
   startRound();
+});
+
+nextRoundBtn.addEventListener("click", () => {
+  if (multiplayerEnabled) {
+    if (!multiplayerState) return;
+    if (multiplayerState.phase !== "game_over") {
+      setMessage("Finish the round before continuing.");
+      return;
+    }
+    sendAction("restart");
+    return;
+  }
+  if (state !== "game_over") {
+    setMessage("Finish the round before continuing.");
+    return;
+  }
+  advanceRound();
 });
 
 devModeToggle.addEventListener("change", (event) => {
@@ -540,7 +637,7 @@ function updateMessageFromState() {
   }
   if (multiplayerState.phase === "game_over") {
     const winner = multiplayerState.winnerIndex === multiplayerPlayerIndex ? "You win!" : "Opponent wins.";
-    setMessage(`${winner} Press Leave to exit.`);
+    setMessage(`${winner} Press Next Round to continue.`);
     return;
   }
   if (isPlayerTurn()) {
@@ -562,6 +659,63 @@ function updateTurnHighlight() {
       yourRowEl.classList.remove("your-turn");
     }
   }
+}
+
+function updateRoundButtons(view) {
+  if (!nextRoundBtn || !restartBtn) return;
+  const phase = view?.phase ?? state;
+  const gameOver = phase === "game_over";
+  nextRoundBtn.classList.toggle("hidden", !gameOver);
+  if (multiplayerEnabled) {
+    restartBtn.classList.add("hidden");
+  } else {
+    restartBtn.classList.remove("hidden");
+  }
+}
+
+function updateLaydownControls(view) {
+  if (!laydownSelectedBtn) return;
+  const phase = view?.phase ?? state;
+  const canUse =
+    phase === "await_discard" &&
+    !youHasLaidDown() &&
+    (!multiplayerEnabled || (multiplayerState?.opponentConnected && isPlayerTurn()));
+  const stagedCount = view?.you?.stagedMelds?.length ?? 0;
+  laydownSelectedBtn.disabled = !canUse || stagedCount === 0;
+}
+
+function stageCardForLaydown(cardId, meldIndex = null) {
+  if (multiplayerEnabled) {
+    if (!multiplayerState) return;
+    if (!multiplayerState.opponentConnected) {
+      setMessage("Waiting for opponent...");
+      return;
+    }
+    if (!isPlayerTurn() || currentPhase() !== "await_discard") return;
+    sendAction("stage", { cardId, meldIndex });
+    return;
+  }
+  const player = game.players[0];
+  const card = player.hand.find((c) => c.cid === cardId);
+  if (!card) return;
+  game.stageCard(player, card, meldIndex);
+  renderAll();
+}
+
+function unstageCardForLaydown(cardId) {
+  if (multiplayerEnabled) {
+    if (!multiplayerState) return;
+    if (!isPlayerTurn() || currentPhase() !== "await_discard") return;
+    sendAction("unstage", { cardId });
+    return;
+  }
+  if (state !== "await_discard") return;
+  const player = game.players[0];
+  if (player.hasLaidDown) return;
+  const card = player.stagedMelds.flatMap((meld) => meld.cards).find((c) => c.cid === cardId);
+  if (!card) return;
+  game.unstageCard(player, card);
+  renderAll();
 }
 
 function wsUrl() {
@@ -769,12 +923,13 @@ yourHandEl.addEventListener("click", (event) => {
   const cardEl = event.target.closest(".card");
   if (!cardEl) return;
   if (currentPhase() !== "await_discard") return;
-  if (!youHasLaidDown()) {
-    setMessage("Lay down first before laying off.");
-    return;
-  }
   const cardId = Number(cardEl.dataset.cardId);
   if (!cardId) return;
+  if (!youHasLaidDown()) {
+    selectedCardId = null;
+    setMessage("Drag cards to Your Melds to stage them.");
+    return;
+  }
   selectedCardId = cardId;
   setMessage("Selected card. Click a meld to lay off.");
   setSelectedHighlight(cardId);
@@ -793,6 +948,10 @@ function handleLayoff(cardId, meldEl) {
   const meld = getMeldFromElement(meldEl);
   const card = getYourHand().find((c) => c.cid === cardId);
   if (!card || !meld) return false;
+  if (meldEl?.dataset?.staged === "true") {
+    setMessage("Cannot lay off onto a staged meld.");
+    return false;
+  }
   if (multiplayerEnabled) {
     if (!multiplayerState) return false;
     if (!multiplayerState.opponentConnected) {
@@ -800,7 +959,9 @@ function handleLayoff(cardId, meldEl) {
       return false;
     }
     if (!isPlayerTurn() || currentPhase() !== "await_discard" || !youHasLaidDown()) return false;
-    const meldOwner = Number(meldEl.dataset.owner === "opponent");
+    const ownerLabel = meldEl.dataset.owner;
+    const opponentIndex = (multiplayerPlayerIndex + 1) % 2;
+    const meldOwner = ownerLabel === "you" ? multiplayerPlayerIndex : opponentIndex;
     const meldIndex = Number(meldEl.dataset.meldIndex);
     sendAction("layoff", { cardId, meldOwner, meldIndex });
     return true;
@@ -820,6 +981,7 @@ function handleLayoffClick(event) {
   if (!selectedCardId || currentPhase() !== "await_discard") return;
   if (!youHasLaidDown()) return;
   const meldEl = event.target.closest(".meld");
+  if (meldEl?.dataset?.staged === "true") return;
   handleLayoff(selectedCardId, meldEl);
 }
 
@@ -828,8 +990,10 @@ function getMeldFromElement(meldEl) {
   const owner = meldEl.dataset.owner;
   const meldIndex = Number(meldEl.dataset.meldIndex);
   const view = getView();
-  const melds = owner === "you" ? view.you.melds : view.opponent.melds;
-  return melds[meldIndex] ?? null;
+  const isStaged = meldEl.dataset.staged === "true";
+  const player = owner === "you" ? view.you : view.opponent;
+  const melds = isStaged ? player.stagedMelds : player.melds;
+  return melds?.[meldIndex] ?? null;
 }
 
 function clearMeldHighlights() {
@@ -843,6 +1007,7 @@ function updateMeldHighlights(cardId) {
   const card = getYourHand().find((c) => c.cid === cardId);
   if (!card) return;
   document.querySelectorAll(".meld").forEach((meldEl) => {
+    if (meldEl.dataset.staged === "true") return;
     const meld = getMeldFromElement(meldEl);
     if (meld && meldCanAdd(meld, card)) {
       meldEl.classList.add("drop-valid");
@@ -850,11 +1015,55 @@ function updateMeldHighlights(cardId) {
   });
 }
 
-[opponentMeldsEl, yourMeldsEl].forEach((meldArea) => {
-  meldArea.addEventListener("click", handleLayoffClick);
+yourMeldsEl.addEventListener("click", (event) => {
+  if (!youHasLaidDown()) {
+    const meldEl = event.target.closest(".meld");
+    if (!meldEl || meldEl.dataset.staged !== "true") return;
+    const cardEl = event.target.closest(".card");
+    if (!cardEl) return;
+    const cardId = Number(cardEl.dataset.cardId);
+    if (cardId) {
+      unstageCardForLaydown(cardId);
+    }
+    return;
+  }
+  handleLayoffClick(event);
 });
 
+opponentMeldsEl.addEventListener("click", handleLayoffClick);
+
 function enableDragAndDrop() {
+  if (!insertMarkerEl) {
+    insertMarkerEl = document.createElement("div");
+    insertMarkerEl.className = "insert-marker";
+    yourHandEl.appendChild(insertMarkerEl);
+  }
+
+  function hideInsertMarker() {
+    if (!insertMarkerEl) return;
+    insertMarkerEl.classList.remove("active");
+  }
+
+  function showInsertMarkerForIndex(cards, index) {
+    if (!insertMarkerEl) return;
+    if (cards.length === 0) {
+      hideInsertMarker();
+      return;
+    }
+    const containerRect = yourHandEl.getBoundingClientRect();
+    const scrollLeft = yourHandEl.scrollLeft;
+    let left;
+    if (index >= cards.length) {
+      const lastRect = cards[cards.length - 1].getBoundingClientRect();
+      left = lastRect.right - containerRect.left + scrollLeft;
+    } else {
+      const targetRect = cards[index].getBoundingClientRect();
+      left = targetRect.left - containerRect.left + scrollLeft;
+    }
+    insertMarkerEl.style.left = `${left - 2}px`;
+    insertMarkerEl.classList.add("active");
+  }
+
   yourHandEl.addEventListener("dragstart", (event) => {
     const cardEl = event.target.closest(".card");
     if (!cardEl) return;
@@ -871,23 +1080,56 @@ function enableDragAndDrop() {
     draggingCardId = null;
     lastDropTargetId = null;
     clearMeldHighlights();
+    hideInsertMarker();
   });
 
   yourHandEl.addEventListener("dragover", (event) => {
     if (currentPhase() !== "await_draw" && currentPhase() !== "await_discard") return;
     event.preventDefault();
+    if (autoSortEnabled) return;
+    const cards = Array.from(yourHandEl.querySelectorAll(".card"));
+    if (cards.length === 0) return;
+    const firstRect = cards[0].getBoundingClientRect();
+    const lastRect = cards[cards.length - 1].getBoundingClientRect();
+    let toIndex;
+    if (event.clientX <= firstRect.left) {
+      toIndex = 0;
+    } else if (event.clientX >= lastRect.right) {
+      toIndex = cards.length;
+    } else {
+      for (let i = 0; i < cards.length; i += 1) {
+        const rect = cards[i].getBoundingClientRect();
+        const midpoint = rect.left + rect.width / 2;
+        if (event.clientX < midpoint) {
+          toIndex = i;
+          break;
+        }
+      }
+      if (toIndex === undefined) {
+        toIndex = cards.length;
+      }
+    }
+    showInsertMarkerForIndex(cards, toIndex);
+  });
+
+  yourHandEl.addEventListener("dragleave", (event) => {
+    if (!event.relatedTarget || !yourHandEl.contains(event.relatedTarget)) {
+      hideInsertMarker();
+    }
   });
 
   yourHandEl.addEventListener("drop", (event) => {
     if (currentPhase() !== "await_draw" && currentPhase() !== "await_discard") return;
     event.preventDefault();
+    if (autoSortEnabled) return;
     const cardId = Number(event.dataTransfer.getData("text/plain")) || draggingCardId;
     if (!cardId) return;
-    
-    // Find target card or nearest position
+    const cards = Array.from(yourHandEl.querySelectorAll(".card"));
+    if (cards.length === 0) return;
+
     let targetEl = event.target.closest(".card");
     let toIndex;
-    
+
     if (targetEl) {
       const targetId = Number(targetEl.dataset.cardId);
       if (targetId === cardId) return;
@@ -895,37 +1137,25 @@ function enableDragAndDrop() {
       toIndex = getYourHand().findIndex((card) => card.cid === targetId);
       lastDropTargetId = targetId;
     } else {
-      // Dropped in gap - find nearest card position based on X
-      const cards = yourHandEl.querySelectorAll(".card");
-      if (cards.length === 0) return;
-
       const firstRect = cards[0].getBoundingClientRect();
       const lastRect = cards[cards.length - 1].getBoundingClientRect();
 
-      if (event.clientX > lastRect.right) {
-        toIndex = cards.length;
-      } else if (event.clientX < firstRect.left) {
+      if (event.clientX <= firstRect.left) {
         toIndex = 0;
+      } else if (event.clientX >= lastRect.right) {
+        toIndex = cards.length;
       } else {
-        let closestIdx = 0;
-        let closestDist = Infinity;
-        cards.forEach((card, idx) => {
-          const rect = card.getBoundingClientRect();
-          const cardCenter = rect.left + rect.width / 2;
-          const dist = Math.abs(event.clientX - cardCenter);
-          if (dist < closestDist) {
-            closestDist = dist;
-            closestIdx = idx;
+        for (let i = 0; i < cards.length; i += 1) {
+          const rect = cards[i].getBoundingClientRect();
+          const midpoint = rect.left + rect.width / 2;
+          if (event.clientX < midpoint) {
+            toIndex = i;
+            break;
           }
-        });
-
-        // If dropped to the right of center, insert after
-        const closestRect = cards[closestIdx].getBoundingClientRect();
-        const closestCenter = closestRect.left + closestRect.width / 2;
-        if (event.clientX > closestCenter && closestIdx < cards.length - 1) {
-          closestIdx++;
         }
-        toIndex = closestIdx;
+        if (toIndex === undefined) {
+          toIndex = cards.length;
+        }
       }
     }
     
@@ -938,6 +1168,7 @@ function enableDragAndDrop() {
     // Adjust toIndex if we removed from before it
     const adjustedToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
     hand.splice(adjustedToIndex, 0, moved);
+    hideInsertMarker();
     renderAll();
   });
 
@@ -954,10 +1185,17 @@ function enableDragAndDrop() {
     clearMeldHighlights();
   });
 
-  [opponentMeldsEl, yourMeldsEl].forEach((meldArea) => {
-    meldArea.addEventListener("dragover", (event) => {
+  [
+    { el: yourMeldsEl, owner: "you" },
+    { el: opponentMeldsEl, owner: "opponent" },
+  ].forEach(({ el, owner }) => {
+    el.addEventListener("dragover", (event) => {
       if (currentPhase() !== "await_discard") return;
-      if (!youHasLaidDown()) return;
+      if (!youHasLaidDown()) {
+        if (owner !== "you") return;
+        event.preventDefault();
+        return;
+      }
       // Check if there are any melds to lay off to
       const view = getView();
       const allMelds = [...view.you.melds, ...view.opponent.melds];
@@ -965,17 +1203,29 @@ function enableDragAndDrop() {
       event.preventDefault();
     });
 
-    meldArea.addEventListener("drop", (event) => {
+    el.addEventListener("drop", (event) => {
       if (currentPhase() !== "await_discard") return;
-      if (!youHasLaidDown()) return;
       event.preventDefault();
       const cardId = Number(event.dataTransfer.getData("text/plain")) || draggingCardId;
-      
+      if (!cardId) return;
+      if (!youHasLaidDown()) {
+        if (owner !== "you") return;
+        const meldEl = event.target.closest(".meld");
+        if (meldEl && meldEl.dataset.staged === "true") {
+          const meldIndex = Number(meldEl.dataset.meldIndex);
+          stageCardForLaydown(cardId, meldIndex);
+        } else {
+          stageCardForLaydown(cardId, null);
+        }
+        clearMeldHighlights();
+        return;
+      }
+
       // Try exact meld first, then find nearest valid meld
       let meldEl = event.target.closest(".meld");
       if (!meldEl) {
         // Find the valid meld that's highlighted (if only one, use it)
-        const validMelds = meldArea.querySelectorAll(".meld.drop-valid");
+        const validMelds = el.querySelectorAll(".meld.drop-valid");
         if (validMelds.length === 1) {
           meldEl = validMelds[0];
         } else if (validMelds.length > 1) {
@@ -995,7 +1245,7 @@ function enableDragAndDrop() {
           meldEl = closest;
         }
       }
-      
+
       if (meldEl && cardId) {
         handleLayoff(cardId, meldEl);
       }
