@@ -76,6 +76,10 @@ export function aiTurn(game, playerIndex) {
     log.push(`Laid off ${moved} card${moved === 1 ? "" : "s"}.`);
   }
 
+  if (game.checkWin(player)) {
+    return { log, drewCard: drawn, drawChoice, discarded: null };
+  }
+
   const avoidRanks = game.opponentMeldRanks(playerIndex);
   const keepRanks = game.meldRanksFor(playerIndex);
   const discard = chooseDiscard(player.hand, avoidRanks, keepRanks);

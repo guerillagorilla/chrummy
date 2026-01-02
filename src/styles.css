@@ -249,7 +249,13 @@ button.active {
   margin-bottom: 6px;
 }
 
-#laydown-selected-btn {
+.meld-actions {
+  display: flex;
+  gap: 8px;
+}
+
+#laydown-selected-btn,
+#auto-stage-btn {
   font-size: 11px;
   padding: 6px 10px;
   border-radius: 999px;
@@ -258,7 +264,8 @@ button.active {
   color: var(--paper);
 }
 
-#laydown-selected-btn:disabled {
+#laydown-selected-btn:disabled,
+#auto-stage-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

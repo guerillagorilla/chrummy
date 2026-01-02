@@ -329,6 +329,25 @@ wss.on("connection", (socket) => {
         return;
       }
 
+      if (msg.action === "auto_stage") {
+        if (room.phase !== "await_discard") {
+          sendError(socket, "Draw first.");
+          return;
+        }
+        const player = game.players[playerIndex];
+        if (player.hasLaidDown) {
+          sendError(socket, "Already laid down.");
+          return;
+        }
+        if (!game.autoStageMelds(player)) {
+          sendError(socket, "No valid melds.");
+          broadcastState(room);
+          return;
+        }
+        broadcastState(room);
+        return;
+      }
+
       if (msg.action === "stage") {
         if (room.phase !== "await_discard") {
           sendError(socket, "Draw first.");
@@ -389,6 +408,13 @@ wss.on("connection", (socket) => {
         }
         if (!game.layOffCardToMeld(game.players[playerIndex], card, meld)) {
           sendError(socket, "Cannot lay off to that meld.");
+          return;
+        }
+        if (game.checkWin(game.players[playerIndex])) {
+          game.applyRoundScores(playerIndex);
+          room.phase = "game_over";
+          room.winnerIndex = playerIndex;
+          broadcastState(room);
           return;
         }
         broadcastState(room);

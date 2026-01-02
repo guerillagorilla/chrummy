@@ -511,6 +511,26 @@ export class Game {
     return true;
   }
 
+  autoStageMelds(player) {
+    if (player.hasLaidDown) return false;
+    this.clearStaged(player);
+    const melds = findMeldsForRequirements(player.hand, this.currentRound().requirements);
+    if (!melds) return false;
+    for (const meld of melds) {
+      for (const card of meld.cards) {
+        player.hand = player.hand.filter((c) => c.cid !== card.cid);
+      }
+      player.stagedMelds.push({
+        type: meld.type,
+        rank: meld.rank ?? null,
+        suit: meld.suit ?? null,
+        cards: [...meld.cards],
+        staged: true,
+      });
+    }
+    return true;
+  }
+
   layOffAll(player) {
     if (!player.hasLaidDown) return 0;
     const allMelds = this.players.flatMap((p) => p.melds);
@@ -616,6 +636,10 @@ export class Game {
   }
 
   checkWinAfterDiscard(player) {
+    return player.hand.length === 0;
+  }
+
+  checkWin(player) {
     return player.hand.length === 0;
   }
 

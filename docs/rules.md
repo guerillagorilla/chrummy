@@ -10,6 +10,7 @@
 - Turn order: player to dealer’s left goes first, then clockwise.
 - On your turn you must draw first: either the face-up discard or the face-down draw stack.
 - After drawing, you may lay down and/or lay off (once you have laid down), then must discard exactly one card to end your turn.
+- If you can lay off your final card onto a meld, you go out immediately without needing to discard.
 - Win condition: a player wins the round when they reach 0 cards (after lay down/lay off/discard).
 - After each round, the next round’s meld requirements apply.
 - Only the top discard is ever available. Any card covered by a new discard is dead and cannot be picked up later.

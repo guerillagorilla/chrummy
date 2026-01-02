@@ -16,6 +16,7 @@ const opponentMeldsEl = document.getElementById("opponent-melds");
 const restartBtn = document.getElementById("restart-btn");
 const nextRoundBtn = document.getElementById("next-round-btn");
 const laydownSelectedBtn = document.getElementById("laydown-selected-btn");
+const autoStageBtn = document.getElementById("auto-stage-btn");
 const devModeToggle = document.getElementById("dev-mode");
 const roomCodeInput = document.getElementById("room-code");
 const createRoomBtn = document.getElementById("create-room");
@@ -40,6 +41,11 @@ let lastDropTargetId = null;
 let revealOpponentCardId = null;
 let revealTimer = null;
 let insertMarkerEl = null;
+let pendingDiscardCardId = null;
+let lastTapTime = 0;
+let lastTapCardId = null;
+let lastPileTapTime = 0;
+let lastPileTapId = null;
 const soundFiles = {
   draw: "/public/assets/sounds/cockatrice/draw.wav",
   play: "/public/assets/sounds/cockatrice/playcard.wav",
@@ -461,6 +467,14 @@ function handlePlayerDiscard(card) {
     }
     if (!card) return;
     if (!isPlayerTurn() || currentPhase() !== "await_discard") return;
+    if (!youHasLaidDown()) {
+      const stagedCount = multiplayerState.you.stagedMelds?.length ?? 0;
+      if (stagedCount > 0) {
+        pendingDiscardCardId = card.cid;
+        sendAction("laydown");
+        return;
+      }
+    }
     sendAction("discard", { cardId: card.cid });
     return;
   }
@@ -468,13 +482,22 @@ function handlePlayerDiscard(card) {
   if (!card) return;
   const player = game.players[0];
   if (!player.hasLaidDown && player.stagedMelds.length > 0) {
+    if (!game.tryLayDownStaged(player)) {
+      const summary = formatRequirements(game.currentRound().requirements);
+      setMessage(`Staged cards do not form ${summary}.`);
+      renderAll();
+      return;
+    }
+    playSound("play");
+  }
+  if (!player.hasLaidDown && player.stagedMelds.length > 0) {
     game.clearStaged(player);
   }
   game.discard(player, card);
   setMessage(`You discarded ${card.rank}.`);
   playSound("discard");
   renderAll();
-  if (game.checkWinAfterDiscard(game.players[0])) {
+  if (game.checkWin(game.players[0])) {
     game.applyRoundScores(0);
     setMessage("You win! Press Next Round to continue or Restart to reset.");
     state = "game_over";
@@ -514,7 +537,7 @@ function runAiTurn() {
     playSound("discard");
   }
 
-  if (game.checkWinAfterDiscard(game.players[1])) {
+  if (game.checkWin(game.players[1])) {
     game.applyRoundScores(1);
     setMessage("Opponent wins. Press Next Round to continue or Restart to reset.");
     state = "game_over";
@@ -537,7 +560,7 @@ function runPlayerAiTurn() {
   if (result.discarded) {
     playSound("discard");
   }
-  if (game.checkWinAfterDiscard(game.players[0])) {
+  if (game.checkWin(game.players[0])) {
     game.applyRoundScores(0);
     setMessage("You win! Press Next Round to continue or Restart to reset.");
     state = "game_over";
@@ -581,6 +604,27 @@ laydownSelectedBtn.addEventListener("click", () => {
     setMessage(`Staged cards do not form ${summary}.`);
   }
   renderAll();
+});
+
+autoStageBtn.addEventListener("click", () => {
+  if (multiplayerEnabled) {
+    if (!multiplayerState) return;
+    if (!multiplayerState.opponentConnected) {
+      setMessage("Waiting for opponent...");
+      return;
+    }
+    if (!isPlayerTurn() || currentPhase() !== "await_discard") return;
+    sendAction("auto_stage");
+    return;
+  }
+  if (state !== "await_discard") return;
+  const player = game.players[0];
+  if (game.autoStageMelds(player)) {
+    setMessage("Staged melds. Review and click Lay Down Selected.");
+    renderAll();
+    return;
+  }
+  setMessage("No valid melds to stage.");
 });
 
 restartBtn.addEventListener("click", () => {
@@ -674,7 +718,7 @@ function updateRoundButtons(view) {
 }
 
 function updateLaydownControls(view) {
-  if (!laydownSelectedBtn) return;
+  if (!laydownSelectedBtn || !autoStageBtn) return;
   const phase = view?.phase ?? state;
   const canUse =
     phase === "await_discard" &&
@@ -682,6 +726,7 @@ function updateLaydownControls(view) {
     (!multiplayerEnabled || (multiplayerState?.opponentConnected && isPlayerTurn()));
   const stagedCount = view?.you?.stagedMelds?.length ?? 0;
   laydownSelectedBtn.disabled = !canUse || stagedCount === 0;
+  autoStageBtn.disabled = !canUse;
 }
 
 function stageCardForLaydown(cardId, meldIndex = null) {
@@ -792,6 +837,9 @@ function handleSocketMessage(event) {
   }
 
   if (msg.type === "error") {
+    if (pendingDiscardCardId) {
+      pendingDiscardCardId = null;
+    }
     setMessage(msg.message);
     return;
   }
@@ -831,6 +879,23 @@ function handleSocketMessage(event) {
     resetSelections();
     renderAll();
     updateMessageFromState();
+    if (
+      pendingDiscardCardId &&
+      multiplayerState.phase === "await_discard" &&
+      isPlayerTurn() &&
+      multiplayerState.opponentConnected
+    ) {
+      if (multiplayerState.you.hasLaidDown) {
+        const card = multiplayerState.you.hand.find((c) => c.cid === pendingDiscardCardId);
+        pendingDiscardCardId = null;
+        if (card) {
+          sendAction("discard", { cardId: card.cid });
+        }
+      } else if ((multiplayerState.you.stagedMelds?.length ?? 0) === 0) {
+        pendingDiscardCardId = null;
+        setMessage("Lay down invalid. Adjust melds.");
+      }
+    }
   }
 }
 
@@ -917,6 +982,25 @@ roomCodeInput.addEventListener("keydown", (event) => {
     const source = pile.dataset.pile;
     handlePlayerDraw(source);
   });
+
+  pile.addEventListener(
+    "touchend",
+    (event) => {
+      if (!canAct()) return;
+      event.preventDefault();
+      const source = pile.dataset.pile;
+      const now = Date.now();
+      if (lastPileTapId === source && now - lastPileTapTime < 350) {
+        handlePlayerDraw(source);
+        lastPileTapId = null;
+        lastPileTapTime = 0;
+      } else {
+        lastPileTapId = source;
+        lastPileTapTime = now;
+      }
+    },
+    { passive: false },
+  );
 });
 
 yourHandEl.addEventListener("click", (event) => {
@@ -971,6 +1055,12 @@ function handleLayoff(cardId, meldEl) {
     playSound("play");
     resetSelections();
     renderAll();
+    if (game.checkWin(game.players[0])) {
+      game.applyRoundScores(0);
+      setMessage("You win! Press Next Round to continue or Restart to reset.");
+      state = "game_over";
+      renderAll();
+    }
     return true;
   }
   setMessage("Cannot lay off to that meld.");
@@ -1064,6 +1154,33 @@ function enableDragAndDrop() {
     insertMarkerEl.classList.add("active");
   }
 
+  function computeInsertIndex(cards, clientX) {
+    if (cards.length === 0) return 0;
+    const firstRect = cards[0].getBoundingClientRect();
+    const lastRect = cards[cards.length - 1].getBoundingClientRect();
+
+    if (clientX <= firstRect.left) return 0;
+    if (clientX >= lastRect.right) return cards.length;
+
+    for (let i = 0; i < cards.length; i += 1) {
+      const rect = cards[i].getBoundingClientRect();
+      const midpoint = rect.left + rect.width / 2;
+      if (clientX < midpoint) return i;
+    }
+    return cards.length;
+  }
+
+  function moveCardInHand(cardId, toIndex) {
+    const hand = getYourHand();
+    const fromIndex = hand.findIndex((card) => card.cid === cardId);
+    if (fromIndex === -1 || toIndex === -1 || toIndex === undefined) return false;
+    if (fromIndex === toIndex) return false;
+    const [moved] = hand.splice(fromIndex, 1);
+    const adjustedToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+    hand.splice(adjustedToIndex, 0, moved);
+    return true;
+  }
+
   yourHandEl.addEventListener("dragstart", (event) => {
     const cardEl = event.target.closest(".card");
     if (!cardEl) return;
@@ -1089,26 +1206,7 @@ function enableDragAndDrop() {
     if (autoSortEnabled) return;
     const cards = Array.from(yourHandEl.querySelectorAll(".card"));
     if (cards.length === 0) return;
-    const firstRect = cards[0].getBoundingClientRect();
-    const lastRect = cards[cards.length - 1].getBoundingClientRect();
-    let toIndex;
-    if (event.clientX <= firstRect.left) {
-      toIndex = 0;
-    } else if (event.clientX >= lastRect.right) {
-      toIndex = cards.length;
-    } else {
-      for (let i = 0; i < cards.length; i += 1) {
-        const rect = cards[i].getBoundingClientRect();
-        const midpoint = rect.left + rect.width / 2;
-        if (event.clientX < midpoint) {
-          toIndex = i;
-          break;
-        }
-      }
-      if (toIndex === undefined) {
-        toIndex = cards.length;
-      }
-    }
+    const toIndex = computeInsertIndex(cards, event.clientX);
     showInsertMarkerForIndex(cards, toIndex);
   });
 
@@ -1137,40 +1235,134 @@ function enableDragAndDrop() {
       toIndex = getYourHand().findIndex((card) => card.cid === targetId);
       lastDropTargetId = targetId;
     } else {
-      const firstRect = cards[0].getBoundingClientRect();
-      const lastRect = cards[cards.length - 1].getBoundingClientRect();
-
-      if (event.clientX <= firstRect.left) {
-        toIndex = 0;
-      } else if (event.clientX >= lastRect.right) {
-        toIndex = cards.length;
-      } else {
-        for (let i = 0; i < cards.length; i += 1) {
-          const rect = cards[i].getBoundingClientRect();
-          const midpoint = rect.left + rect.width / 2;
-          if (event.clientX < midpoint) {
-            toIndex = i;
-            break;
-          }
-        }
-        if (toIndex === undefined) {
-          toIndex = cards.length;
-        }
-      }
+      toIndex = computeInsertIndex(cards, event.clientX);
     }
-    
-    const hand = getYourHand();
-    const fromIndex = hand.findIndex((card) => card.cid === cardId);
-    if (fromIndex === -1 || toIndex === -1 || toIndex === undefined) return;
-    if (fromIndex === toIndex) return;
-    
-    const [moved] = hand.splice(fromIndex, 1);
-    // Adjust toIndex if we removed from before it
-    const adjustedToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
-    hand.splice(adjustedToIndex, 0, moved);
+
+    if (!moveCardInHand(cardId, toIndex)) return;
     hideInsertMarker();
     renderAll();
   });
+
+  let touchCardId = null;
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchDragging = false;
+
+  yourHandEl.addEventListener(
+    "touchstart",
+    (event) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      const target = event.target.closest(".card");
+      if (!target) return;
+      const cardId = Number(target.dataset.cardId);
+      if (!cardId) return;
+      touchCardId = cardId;
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      touchDragging = false;
+      draggingCardId = cardId;
+      if (currentPhase() === "await_discard" && youHasLaidDown()) {
+        updateMeldHighlights(cardId);
+      }
+    },
+    { passive: true },
+  );
+
+  yourHandEl.addEventListener(
+    "touchmove",
+    (event) => {
+      if (!touchCardId) return;
+      const touch = event.touches[0];
+      if (!touch) return;
+      const dx = Math.abs(touch.clientX - touchStartX);
+      const dy = Math.abs(touch.clientY - touchStartY);
+      if (!touchDragging && (dx > 6 || dy > 6)) {
+        touchDragging = true;
+      }
+      if (!touchDragging) return;
+      event.preventDefault();
+      const cards = Array.from(yourHandEl.querySelectorAll(".card"));
+      if (cards.length > 0 && yourHandEl.contains(document.elementFromPoint(touch.clientX, touch.clientY))) {
+        const toIndex = computeInsertIndex(cards, touch.clientX);
+        showInsertMarkerForIndex(cards, toIndex);
+      } else {
+        hideInsertMarker();
+      }
+    },
+    { passive: false },
+  );
+
+  yourHandEl.addEventListener(
+    "touchend",
+    (event) => {
+      if (!touchCardId) return;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const cardId = touchCardId;
+      touchCardId = null;
+
+      if (!touchDragging) {
+        const now = Date.now();
+        if (lastTapCardId === cardId && now - lastTapTime < 350) {
+          const card = getYourHand().find((c) => c.cid === cardId);
+          handlePlayerDiscard(card);
+          lastTapCardId = null;
+          lastTapTime = 0;
+        } else {
+          lastTapCardId = cardId;
+          lastTapTime = now;
+        }
+        draggingCardId = null;
+        clearMeldHighlights();
+        hideInsertMarker();
+        return;
+      }
+
+      const target = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (!target) {
+        draggingCardId = null;
+        touchDragging = false;
+        clearMeldHighlights();
+        hideInsertMarker();
+        return;
+      }
+
+      if (discardPileEl.contains(target)) {
+        const card = getYourHand().find((c) => c.cid === cardId);
+        handlePlayerDiscard(card);
+      } else if (yourMeldsEl.contains(target) || opponentMeldsEl.contains(target)) {
+        const owner = opponentMeldsEl.contains(target) ? "opponent" : "you";
+        if (!youHasLaidDown()) {
+          if (owner === "you") {
+            const meldEl = target.closest(".meld");
+            if (meldEl && meldEl.dataset.staged === "true") {
+              stageCardForLaydown(cardId, Number(meldEl.dataset.meldIndex));
+            } else {
+              stageCardForLaydown(cardId, null);
+            }
+          }
+        } else {
+          const meldEl = target.closest(".meld");
+          if (meldEl) {
+            handleLayoff(cardId, meldEl);
+          }
+        }
+      } else if (yourHandEl.contains(target)) {
+        const cards = Array.from(yourHandEl.querySelectorAll(".card"));
+        const toIndex = computeInsertIndex(cards, touch.clientX);
+        if (moveCardInHand(cardId, toIndex)) {
+          renderAll();
+        }
+      }
+
+      draggingCardId = null;
+      touchDragging = false;
+      clearMeldHighlights();
+      hideInsertMarker();
+    },
+    { passive: false },
+  );
 
   discardPileEl.addEventListener("dragover", (event) => {
     if (currentPhase() !== "await_discard") return;
