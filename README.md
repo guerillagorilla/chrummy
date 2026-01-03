@@ -40,3 +40,23 @@ See `docs/rules.md` for detailed gameplay rules, including the 7-round progressi
 - After laying down, click a card, then a meld to lay off.
 - Drag cards onto the discard pile to discard.
 - Drag a card onto a meld to place it (after laying down).
+
+## Panel Reference
+
+| Panel | Selector | Description |
+|-------|----------|-------------|
+| **Top bar** | `.topbar` | Title, message, score, buttons |
+| **Message** | `#message` | Status text ("Your turn...") |
+| **Score** | `#score` | Score display |
+| **Opponent row** | `.opponent-row` | Contains opponent hand + log |
+| **Opponent hand** | `#opponent-hand` / `.panel.opponent` | Opponent's cards (face down) |
+| **Opponent log** | `#opponent-log` / `.panel.log` | AI action history |
+| **Center area** | `.center-area` | Draw/discard piles + melds |
+| **Piles** | `.piles-section` | Draw pile + discard pile |
+| **Draw pile** | `#draw-pile` | Face-down deck |
+| **Discard pile** | `#discard-pile` | Face-up discard |
+| **Melds section** | `.melds-section` | Both players' melds |
+| **Opponent melds** | `#opponent-melds` | Opponent's laid melds |
+| **Your melds** | `#your-melds` | Your laid melds |
+| **Your row** | `.your-row` | Your hand area (gets turn glow) |
+| **Your hand** | `#your-hand` / `.panel.you` | Your cards |
