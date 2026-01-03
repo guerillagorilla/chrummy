@@ -288,6 +288,16 @@ function getOpponentMelds() {
   return view.mode === "multiplayer" ? [] : game.players[1].melds;
 }
 
+function hasLayoffOpportunity(view) {
+  if (!view?.you?.hasLaidDown) return false;
+  const melds = [
+    ...(view.you.melds ?? []),
+    ...(view.opponents ? view.opponents.flatMap((opponent) => opponent.melds ?? []) : []),
+  ];
+  if (melds.length === 0) return false;
+  return (view.you.hand ?? []).some((card) => melds.some((meld) => meldCanAdd(meld, card)));
+}
+
 function updateScore() {
   const view = getView();
   const roundIndex = Number.isFinite(view.roundIndex) ? view.roundIndex : 0;
@@ -1165,6 +1175,11 @@ function handleSocketMessage(event) {
       multiplayerReady()
     ) {
       if (multiplayerState.you.hasLaidDown) {
+        if (hasLayoffOpportunity(multiplayerState)) {
+          pendingDiscardCardId = null;
+          setMessage("You can lay off before discarding.");
+          return;
+        }
         const card = multiplayerState.you.hand.find((c) => c.cid === pendingDiscardCardId);
         pendingDiscardCardId = null;
         if (card) {
