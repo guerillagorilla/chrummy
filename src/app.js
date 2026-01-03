@@ -314,6 +314,40 @@ function logOpponent(text) {
   opponentLogEl.prepend(item);
 }
 
+function cardText(card) {
+  if (!card) return "Unknown";
+  if (card.rank === JokerRank) return "JKR";
+  const suitChar = { spades: "♠", hearts: "♥", diamonds: "♦", clubs: "♣" }[card.suit] || "";
+  return `${card.rank}${suitChar}`;
+}
+
+function totalMeldCardsFor(view, playerIndex) {
+  if (!view) return 0;
+  const player = playerIndex === view.playerIndex ? view.you : view.opponents?.find((op) => op.playerIndex === playerIndex);
+  if (!player) return 0;
+  return (player.melds ?? []).reduce((sum, meld) => sum + meld.cards.length, 0);
+}
+
+function logMultiplayerActivity(prevState, nextState) {
+  if (!devMode || !multiplayerEnabled || !opponentLogEl || !prevState || !nextState) return;
+  const prevPhase = prevState.phase;
+  const nextPhase = nextState.phase;
+  const actor = prevState.currentPlayerIndex;
+  if (actor !== multiplayerPlayerIndex) {
+    if (prevPhase === "await_draw" && nextPhase === "await_discard") {
+      logOpponent(`${playerLabel(actor, nextState)} drew.`);
+    }
+    if (prevState.discardTop?.cid !== nextState.discardTop?.cid) {
+      logOpponent(`${playerLabel(actor, nextState)} discarded ${cardText(nextState.discardTop)}.`);
+    }
+    const prevMelds = totalMeldCardsFor(prevState, actor);
+    const nextMelds = totalMeldCardsFor(nextState, actor);
+    if (nextMelds > prevMelds) {
+      logOpponent(`${playerLabel(actor, nextState)} melded.`);
+    }
+  }
+}
+
 function cardLabel(card) {
   if (!card) return "Empty";
   if (card.rank === JokerRank) return "JOKER";
@@ -1103,6 +1137,7 @@ function handleSocketMessage(event) {
     const prevState = multiplayerState;
     multiplayerState = msg;
     syncManualHandOrder(multiplayerState.you.hand);
+    logMultiplayerActivity(prevState, multiplayerState);
     maybePlayMultiplayerSounds(prevState, multiplayerState);
     setMultiplayerEnabled(true);
     resetSelections();
