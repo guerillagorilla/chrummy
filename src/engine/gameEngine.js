@@ -325,10 +325,10 @@ export function canLayDownWithCard(hand, card, requirements) {
 
 export class Game {
   constructor(players = 2, dealerIndex = 0) {
-    if (players !== 2) {
-      throw new Error("Prototype supports 2 players only.");
+    if (players < 2 || players > 10) {
+      throw new Error("Players must be between 2 and 10.");
     }
-    this.players = [new Player("You"), new Player("Opponent")];
+    this.players = Array.from({ length: players }, (_, idx) => new Player(`Player ${idx + 1}`));
     this.dealerIndex = dealerIndex;
     this.currentPlayerIndex = 0;
     this.drawPile = [];

@@ -136,6 +136,22 @@ button {
   cursor: default;
 }
 
+#room-size {
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(8, 28, 20, 0.7);
+  color: var(--paper);
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#room-size:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 button.active {
   background: var(--danger);
   color: #fff;
@@ -177,6 +193,38 @@ button.active {
 .opponent-row .panel.opponent {
   flex: 1;
   height: 100%;
+}
+
+.opponent-hands {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.opponent-list {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.opponent-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opponent-stack.disconnected {
+  opacity: 0.6;
+}
+
+.opponent-label {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.opponent-hand {
+  height: var(--hand-card-height);
+  flex-wrap: nowrap;
 }
 
 .opponent-row .log {
@@ -312,6 +360,40 @@ button.active {
   min-height: 0;
 }
 
+.meld-group-grid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.meld-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.meld-group-label {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.meld-grid-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  align-content: flex-start;
+  min-height: 90px;
+}
+
 .meld {
   display: flex;
   position: relative;
@@ -419,6 +501,11 @@ button.active {
   position: relative;
   align-content: flex-start;
   height: calc(var(--hand-row-height) * 2 + var(--hand-card-gap));
+}
+
+.hand.opponent-hand {
+  height: var(--hand-card-height);
+  flex-wrap: nowrap;
 }
 
 .card {

@@ -23,6 +23,17 @@
           <button id="next-round-btn" type="button" class="hidden">Next Round</button>
           <div class="room-controls">
             <input id="room-code" type="text" placeholder="CODE" maxlength="4" />
+            <select id="room-size" aria-label="Room size">
+              <option value="2" selected>2P</option>
+              <option value="3">3P</option>
+              <option value="4">4P</option>
+              <option value="5">5P</option>
+              <option value="6">6P</option>
+              <option value="7">7P</option>
+              <option value="8">8P</option>
+              <option value="9">9P</option>
+              <option value="10">10P</option>
+            </select>
             <button id="create-room" type="button">Create</button>
             <button id="join-room" type="button">Join</button>
             <button id="leave-room" type="button" class="hidden">Leave</button>
@@ -32,8 +43,8 @@
 
       <div class="opponent-row">
         <section class="panel opponent">
-          <h2>Opponent</h2>
-          <div id="opponent-hand" class="hand"></div>
+          <h2>Opponents</h2>
+          <div id="opponent-hand" class="opponent-hands"></div>
         </section>
         <section class="panel log">
           <h3>Opponent Log</h3>
@@ -45,7 +56,7 @@
         <section class="panel melds-section melds-section-left">
           <div class="meld-area">
             <h3>Opponent Melds</h3>
-            <div id="opponent-melds" class="meld-grid"></div>
+            <div id="opponent-melds" class="meld-group-grid"></div>
           </div>
         </section>
         <section class="panel piles-section">

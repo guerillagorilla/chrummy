@@ -40,6 +40,7 @@ See `docs/rules.md` for detailed gameplay rules, including the 7-round progressi
 - After laying down, click a card, then a meld to lay off.
 - Drag cards onto the discard pile to discard.
 - Drag a card onto a meld to place it (after laying down).
+- Select a room size (2–10) before Create to set multiplayer player count.
 
 ## Panel Reference
 

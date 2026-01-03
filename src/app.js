@@ -23,6 +23,7 @@ const roomCodeInput = document.getElementById("room-code");
 const createRoomBtn = document.getElementById("create-room");
 const joinRoomBtn = document.getElementById("join-room");
 const leaveRoomBtn = document.getElementById("leave-room");
+const roomSizeSelect = document.getElementById("room-size");
 const yourRowEl = document.querySelector(".your-row");
 
 
@@ -147,6 +148,16 @@ function registerAudioUnlock() {
 }
 
 function buildLocalView() {
+  const opponents = game.players.slice(1).map((player, idx) => ({
+    playerIndex: idx + 1,
+    connected: true,
+    hand: player.hand,
+    handCount: player.hand.length,
+    melds: player.melds,
+    stagedMelds: player.stagedMelds,
+    hasLaidDown: player.hasLaidDown,
+    totalScore: player.totalScore,
+  }));
   return {
     mode: "local",
     phase: state,
@@ -154,6 +165,8 @@ function buildLocalView() {
     winnerIndex: null,
     roundIndex: game.roundIndex,
     round: game.currentRound(),
+    connectedCount: game.players.length,
+    maxPlayers: game.players.length,
     drawCount: game.drawPile.length,
     discardTop: game.discardPile[game.discardPile.length - 1] ?? null,
     you: {
@@ -163,14 +176,7 @@ function buildLocalView() {
       hasLaidDown: game.players[0].hasLaidDown,
       totalScore: game.players[0].totalScore,
     },
-    opponent: {
-      hand: game.players[1].hand,
-      handCount: game.players[1].hand.length,
-      melds: game.players[1].melds,
-      stagedMelds: game.players[1].stagedMelds,
-      hasLaidDown: game.players[1].hasLaidDown,
-      totalScore: game.players[1].totalScore,
-    },
+    opponents,
   };
 }
 
@@ -185,6 +191,29 @@ function currentPhase() {
   if (multiplayerState) return multiplayerState.phase;
   if (multiplayerEnabled) return "waiting";
   return state;
+}
+
+function multiplayerReady() {
+  if (!multiplayerState) return false;
+  if (typeof multiplayerState.ready === "boolean") return multiplayerState.ready;
+  const connected = multiplayerState.connectedCount ?? 0;
+  const maxPlayers = multiplayerState.maxPlayers ?? 2;
+  return connected >= 2 && connected === maxPlayers;
+}
+
+function waitingForPlayersMessage() {
+  const connected = multiplayerState?.connectedCount ?? 0;
+  const maxPlayers = multiplayerState?.maxPlayers ?? 2;
+  return `Waiting for players (${connected}/${maxPlayers})...`;
+}
+
+function playerLabel(index, view) {
+  const reference = view ?? getView();
+  const isMultiplayer = Boolean(multiplayerState) || reference?.mode === "multiplayer";
+  if (!isMultiplayer) {
+    return index === 1 ? "Opponent" : `Player ${index + 1}`;
+  }
+  return index === multiplayerPlayerIndex ? "You" : `Player ${index + 1}`;
 }
 
 function isPlayerTurn() {
@@ -205,7 +234,10 @@ function getYourHand() {
 
 function getOpponentMelds() {
   const view = getView();
-  return view.mode === "multiplayer" ? view.opponent.melds : game.players[1].melds;
+  if (view.opponents) {
+    return view.opponents.flatMap((opponent) => opponent.melds ?? []);
+  }
+  return view.mode === "multiplayer" ? [] : game.players[1].melds;
 }
 
 function updateScore() {
@@ -215,7 +247,15 @@ function updateScore() {
   const roundData = view.round ?? ROUNDS[roundIndex];
   const roundSummary = roundData ? formatRequirements(roundData.requirements) : "";
   const roundLabel = roundSummary ? `Round ${roundIndex + 1}/${roundTotal}: ${roundSummary}` : `Round ${roundIndex + 1}/${roundTotal}`;
-  scoreEl.textContent = `${roundLabel} | You: ${view.you.totalScore} | Opponent: ${view.opponent.totalScore}`;
+  const opponents = view.opponents ?? [];
+  let opponentsLabel = "Opponents: 0";
+  if (opponents.length === 1 && view.mode === "local") {
+    opponentsLabel = `Opponent: ${opponents[0].totalScore}`;
+  } else if (opponents.length > 0) {
+    const scores = opponents.map((opponent) => `P${opponent.playerIndex + 1}: ${opponent.totalScore}`).join(" ");
+    opponentsLabel = `Opponents: ${scores}`;
+  }
+  scoreEl.textContent = `${roundLabel} | You: ${view.you.totalScore} | ${opponentsLabel}`;
   if (subtitleEl) {
     subtitleEl.textContent = roundSummary ? `Round ${roundIndex + 1}: ${roundSummary}` : `Round ${roundIndex + 1}`;
   }
@@ -349,14 +389,16 @@ function sortHand(hand) {
   });
 }
 
-function renderMelds(container, playerView, owner) {
-  container.innerHTML = "";
+function renderMelds(container, playerView, ownerIndex, { clear = true } = {}) {
+  if (clear) {
+    container.innerHTML = "";
+  }
   const staged = playerView.stagedMelds ?? [];
   const committed = playerView.melds ?? [];
   staged.forEach((meld, meldIndex) => {
     const meldEl = document.createElement("div");
     meldEl.className = "meld staged";
-    meldEl.dataset.owner = owner;
+    meldEl.dataset.ownerIndex = String(ownerIndex);
     meldEl.dataset.meldIndex = String(meldIndex);
     meldEl.dataset.staged = "true";
     meld.cards.forEach((card) => {
@@ -368,7 +410,7 @@ function renderMelds(container, playerView, owner) {
   committed.forEach((meld, meldIndex) => {
     const meldEl = document.createElement("div");
     meldEl.className = "meld";
-    meldEl.dataset.owner = owner;
+    meldEl.dataset.ownerIndex = String(ownerIndex);
     meldEl.dataset.meldIndex = String(meldIndex);
     meldEl.dataset.staged = "false";
     meld.cards.forEach((card) => {
@@ -407,6 +449,71 @@ function setSelectedHighlight(cardId) {
   }
 }
 
+function renderOpponentHands(view) {
+  opponentHandEl.innerHTML = "";
+  const opponents = view.opponents ?? [];
+  if (opponents.length === 0) return;
+  const list = document.createElement("div");
+  list.className = "opponent-list";
+  opponents.forEach((opponent) => {
+    const stack = document.createElement("div");
+    stack.className = "opponent-stack";
+    if (opponent.connected === false) {
+      stack.classList.add("disconnected");
+    }
+    const label = document.createElement("div");
+    label.className = "opponent-label";
+    label.textContent = playerLabel(opponent.playerIndex, view);
+    const hand = document.createElement("div");
+    hand.className = "hand opponent-hand";
+    if (view.mode === "local" && Array.isArray(opponent.hand)) {
+      for (const card of opponent.hand) {
+        const revealThis = devMode || card.cid === revealOpponentCardId;
+        const cardEl = renderCard(card, {
+          faceUp: revealThis,
+        });
+        if (!devMode && card.cid === revealOpponentCardId) {
+          cardEl.classList.add("reveal");
+        }
+        hand.appendChild(cardEl);
+      }
+    } else {
+      const count = opponent.handCount ?? 0;
+      for (let i = 0; i < count; i += 1) {
+        hand.appendChild(renderCard(null, { faceUp: false }));
+      }
+    }
+    stack.append(label, hand);
+    list.appendChild(stack);
+  });
+  opponentHandEl.appendChild(list);
+}
+
+function renderOpponentMeldGroups(view) {
+  opponentMeldsEl.innerHTML = "";
+  const opponents = view.opponents ?? [];
+  if (opponents.length === 0) return;
+  const useGroupedLayout = !(opponents.length === 1 && view.mode === "local");
+  opponentMeldsEl.classList.toggle("meld-group-grid", useGroupedLayout);
+  opponentMeldsEl.classList.toggle("meld-grid", !useGroupedLayout);
+  if (!useGroupedLayout) {
+    renderMelds(opponentMeldsEl, opponents[0], opponents[0].playerIndex);
+    return;
+  }
+  opponents.forEach((opponent) => {
+    const group = document.createElement("div");
+    group.className = "meld-group";
+    const label = document.createElement("div");
+    label.className = "meld-group-label";
+    label.textContent = playerLabel(opponent.playerIndex, view);
+    const grid = document.createElement("div");
+    grid.className = "meld-grid meld-grid-group";
+    renderMelds(grid, opponent, opponent.playerIndex);
+    group.append(label, grid);
+    opponentMeldsEl.appendChild(group);
+  });
+}
+
 function renderAll() {
   const view = getView();
   if (opponentLogPanel) {
@@ -418,21 +525,10 @@ function renderAll() {
     selectable: true,
     selectedId: selectedCardId,
   });
-  opponentHandEl.innerHTML = "";
-  const opponentHand =
-    view.mode === "multiplayer" ? Array.from({ length: view.opponent.handCount }) : view.opponent.hand;
-  for (const card of opponentHand) {
-    const revealThis = view.mode === "local" && (devMode || card.cid === revealOpponentCardId);
-    const cardEl = renderCard(card, {
-      faceUp: revealThis,
-    });
-    if (view.mode === "local" && !devMode && card.cid === revealOpponentCardId) {
-      cardEl.classList.add("reveal");
-    }
-    opponentHandEl.appendChild(cardEl);
-  }
-  renderMelds(yourMeldsEl, view.you, "you");
-  renderMelds(opponentMeldsEl, view.opponent, "opponent");
+  renderOpponentHands(view);
+  const ownerIndex = multiplayerState ? multiplayerPlayerIndex : 0;
+  renderMelds(yourMeldsEl, view.you, ownerIndex);
+  renderOpponentMeldGroups(view);
   renderPiles(view);
   updateScore();
   updateRoundButtons(view);
@@ -480,7 +576,7 @@ function canAct() {
   const phase = currentPhase();
   if (multiplayerEnabled) {
     if (!multiplayerState) return false;
-    if (!multiplayerState.opponentConnected) return false;
+    if (!multiplayerReady()) return false;
     return isPlayerTurn() && (phase === "await_draw" || phase === "await_discard");
   }
   return phase === "await_draw" || phase === "await_discard";
@@ -489,8 +585,8 @@ function canAct() {
 function handlePlayerDraw(source) {
   if (multiplayerEnabled) {
     if (!multiplayerState) return;
-    if (!multiplayerState.opponentConnected) {
-      setMessage("Waiting for opponent...");
+    if (!multiplayerReady()) {
+      setMessage(waitingForPlayersMessage());
       return;
     }
     if (!isPlayerTurn() || currentPhase() !== "await_draw") return;
@@ -513,8 +609,8 @@ function handlePlayerDraw(source) {
 function handlePlayerDiscard(card) {
   if (multiplayerEnabled) {
     if (!multiplayerState) return;
-    if (!multiplayerState.opponentConnected) {
-      setMessage("Waiting for opponent...");
+    if (!multiplayerReady()) {
+      setMessage(waitingForPlayersMessage());
       return;
     }
     if (!card) return;
@@ -627,8 +723,8 @@ function runPlayerAiTurn() {
 laydownSelectedBtn.addEventListener("click", () => {
   if (multiplayerEnabled) {
     if (!multiplayerState) return;
-    if (!multiplayerState.opponentConnected) {
-      setMessage("Waiting for opponent...");
+    if (!multiplayerReady()) {
+      setMessage(waitingForPlayersMessage());
       return;
     }
     if (!isPlayerTurn() || currentPhase() !== "await_discard") return;
@@ -661,8 +757,8 @@ laydownSelectedBtn.addEventListener("click", () => {
 autoStageBtn.addEventListener("click", () => {
   if (multiplayerEnabled) {
     if (!multiplayerState) return;
-    if (!multiplayerState.opponentConnected) {
-      setMessage("Waiting for opponent...");
+    if (!multiplayerReady()) {
+      setMessage(waitingForPlayersMessage());
       return;
     }
     if (!isPlayerTurn() || currentPhase() !== "await_discard") return;
@@ -727,27 +823,30 @@ function setMultiplayerEnabled(enabled) {
 function updateMessageFromState() {
   if (!multiplayerState) return;
   updateTurnHighlight();
-  if (!multiplayerState.opponentConnected) {
-    setMessage("Waiting for opponent...", "waiting");
+  if (!multiplayerReady()) {
+    setMessage(waitingForPlayersMessage(), "waiting");
     return;
   }
   if (multiplayerState.phase === "game_over") {
-    const winner = multiplayerState.winnerIndex === multiplayerPlayerIndex ? "You win!" : "Opponent wins.";
-    setMessage(`${winner} Press Next Round to continue.`);
+    const winnerLabel =
+      multiplayerState.winnerIndex === multiplayerPlayerIndex
+        ? "You win!"
+        : `${playerLabel(multiplayerState.winnerIndex, multiplayerState)} wins.`;
+    setMessage(`${winnerLabel} Press Next Round to continue.`);
     return;
   }
   if (isPlayerTurn()) {
     const prompt = multiplayerState.phase === "await_draw" ? "Your turn: draw from deck or discard." : "Your turn: discard.";
     setMessage(prompt, "your-turn");
   } else {
-    setMessage("Opponent's turn.", "waiting");
+    setMessage(`${playerLabel(multiplayerState.currentPlayerIndex, multiplayerState)}'s turn.`, "waiting");
   }
 }
 
 function updateTurnHighlight() {
   if (yourRowEl) {
     const showHighlight = multiplayerEnabled && 
-      multiplayerState?.opponentConnected && 
+      multiplayerReady() && 
       isPlayerTurn();
     if (showHighlight) {
       yourRowEl.classList.add("your-turn");
@@ -775,7 +874,7 @@ function updateLaydownControls(view) {
   const canUse =
     phase === "await_discard" &&
     !youHasLaidDown() &&
-    (!multiplayerEnabled || (multiplayerState?.opponentConnected && isPlayerTurn()));
+    (!multiplayerEnabled || (multiplayerReady() && isPlayerTurn()));
   const stagedCount = view?.you?.stagedMelds?.length ?? 0;
   laydownSelectedBtn.disabled = !canUse || stagedCount === 0;
   autoStageBtn.disabled = !canUse;
@@ -784,8 +883,8 @@ function updateLaydownControls(view) {
 function stageCardForLaydown(cardId, meldIndex = null) {
   if (multiplayerEnabled) {
     if (!multiplayerState) return;
-    if (!multiplayerState.opponentConnected) {
-      setMessage("Waiting for opponent...");
+    if (!multiplayerReady()) {
+      setMessage(waitingForPlayersMessage());
       return;
     }
     if (!isPlayerTurn() || currentPhase() !== "await_discard") return;
@@ -873,8 +972,12 @@ function maybePlayMultiplayerSounds(prevState, nextState) {
     }
   }
 
-  const prevMeldCards = totalMeldCards(prevState.you.melds) + totalMeldCards(prevState.opponent.melds);
-  const nextMeldCards = totalMeldCards(nextState.you.melds) + totalMeldCards(nextState.opponent.melds);
+  const prevOpponents = prevState.opponents ?? [];
+  const nextOpponents = nextState.opponents ?? [];
+  const prevOpponentCards = prevOpponents.reduce((sum, opponent) => sum + totalMeldCards(opponent.melds ?? []), 0);
+  const nextOpponentCards = nextOpponents.reduce((sum, opponent) => sum + totalMeldCards(opponent.melds ?? []), 0);
+  const prevMeldCards = totalMeldCards(prevState.you.melds) + prevOpponentCards;
+  const nextMeldCards = totalMeldCards(nextState.you.melds) + nextOpponentCards;
   if (nextMeldCards > prevMeldCards) {
     playSound("play");
   }
@@ -903,7 +1006,7 @@ function handleSocketMessage(event) {
     const url = new URL(location.href);
     url.searchParams.set("room", multiplayerRoom);
     history.replaceState(null, "", url);
-    setMessage("Waiting for opponent...", "waiting");
+    setMessage("Waiting for players...", "waiting");
     showRoomControls(true);
     return;
   }
@@ -914,11 +1017,8 @@ function handleSocketMessage(event) {
     return;
   }
 
-  if (msg.type === "opponent_left") {
-    setMessage("Opponent left the game.", "waiting");
-    if (multiplayerState) {
-      multiplayerState.opponentConnected = false;
-    }
+  if (msg.type === "player_left") {
+    setMessage(`${playerLabel(msg.playerIndex, multiplayerState)} left the game.`, "waiting");
     renderAll();
     return;
   }
@@ -935,7 +1035,7 @@ function handleSocketMessage(event) {
       pendingDiscardCardId &&
       multiplayerState.phase === "await_discard" &&
       isPlayerTurn() &&
-      multiplayerState.opponentConnected
+      multiplayerReady()
     ) {
       if (multiplayerState.you.hasLaidDown) {
         const card = multiplayerState.you.hand.find((c) => c.cid === pendingDiscardCardId);
@@ -962,7 +1062,8 @@ function sendAction(action, payload = {}) {
 function createRoom() {
   setMultiplayerEnabled(true);
   setMessage("Creating room...");
-  sendSocket({ type: "create_room" });
+  const size = Number(roomSizeSelect?.value ?? 2);
+  sendSocket({ type: "create_room", players: size });
 }
 
 function joinRoom(code) {
@@ -1003,6 +1104,9 @@ function showRoomControls(inRoom) {
   joinRoomBtn.classList.toggle("hidden", inRoom);
   leaveRoomBtn.classList.toggle("hidden", !inRoom);
   roomCodeInput.readOnly = inRoom;
+  if (roomSizeSelect) {
+    roomSizeSelect.disabled = inRoom;
+  }
 }
 
 createRoomBtn.addEventListener("click", () => {
@@ -1090,15 +1194,14 @@ function handleLayoff(cardId, meldEl) {
   }
   if (multiplayerEnabled) {
     if (!multiplayerState) return false;
-    if (!multiplayerState.opponentConnected) {
-      setMessage("Waiting for opponent...");
+    if (!multiplayerReady()) {
+      setMessage(waitingForPlayersMessage());
       return false;
     }
     if (!isPlayerTurn() || currentPhase() !== "await_discard" || !youHasLaidDown()) return false;
-    const ownerLabel = meldEl.dataset.owner;
-    const opponentIndex = (multiplayerPlayerIndex + 1) % 2;
-    const meldOwner = ownerLabel === "you" ? multiplayerPlayerIndex : opponentIndex;
+    const meldOwner = Number(meldEl.dataset.ownerIndex);
     const meldIndex = Number(meldEl.dataset.meldIndex);
+    if (!Number.isFinite(meldOwner)) return false;
     sendAction("layoff", { cardId, meldOwner, meldIndex });
     return true;
   }
@@ -1127,13 +1230,22 @@ function handleLayoffClick(event) {
   handleLayoff(selectedCardId, meldEl);
 }
 
+function getPlayerViewByIndex(index) {
+  if (multiplayerState) {
+    if (index === multiplayerPlayerIndex) return multiplayerState.you;
+    return multiplayerState.opponents?.find((opponent) => opponent.playerIndex === index) ?? null;
+  }
+  return game.players[index] ?? null;
+}
+
 function getMeldFromElement(meldEl) {
   if (!meldEl) return null;
-  const owner = meldEl.dataset.owner;
+  const ownerIndex = Number(meldEl.dataset.ownerIndex);
   const meldIndex = Number(meldEl.dataset.meldIndex);
-  const view = getView();
+  if (!Number.isFinite(ownerIndex)) return null;
   const isStaged = meldEl.dataset.staged === "true";
-  const player = owner === "you" ? view.you : view.opponent;
+  const player = getPlayerViewByIndex(ownerIndex);
+  if (!player) return null;
   const melds = isStaged ? player.stagedMelds : player.melds;
   return melds?.[meldIndex] ?? null;
 }
@@ -1430,19 +1542,20 @@ function enableDragAndDrop() {
   });
 
   [
-    { el: yourMeldsEl, owner: "you" },
-    { el: opponentMeldsEl, owner: "opponent" },
-  ].forEach(({ el, owner }) => {
+    { el: yourMeldsEl, allowStage: true },
+    { el: opponentMeldsEl, allowStage: false },
+  ].forEach(({ el, allowStage }) => {
     el.addEventListener("dragover", (event) => {
       if (currentPhase() !== "await_discard") return;
       if (!youHasLaidDown()) {
-        if (owner !== "you") return;
+        if (!allowStage) return;
         event.preventDefault();
         return;
       }
       // Check if there are any melds to lay off to
       const view = getView();
-      const allMelds = [...view.you.melds, ...view.opponent.melds];
+      const opponentMelds = view.opponents ? view.opponents.flatMap((opponent) => opponent.melds ?? []) : [];
+      const allMelds = [...view.you.melds, ...opponentMelds];
       if (allMelds.length === 0) return;
       event.preventDefault();
     });
@@ -1453,7 +1566,7 @@ function enableDragAndDrop() {
       const cardId = Number(event.dataTransfer.getData("text/plain")) || draggingCardId;
       if (!cardId) return;
       if (!youHasLaidDown()) {
-        if (owner !== "you") return;
+        if (!allowStage) return;
         const meldEl = event.target.closest(".meld");
         if (meldEl && meldEl.dataset.staged === "true") {
           const meldIndex = Number(meldEl.dataset.meldIndex);

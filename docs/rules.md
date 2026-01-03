@@ -2,7 +2,7 @@
 
 ## Gameplay
 
-- Players: 2 for now.
+- Players: 2–10 in multiplayer (room size sets player count).
 - Decks: 1 deck + 2 jokers.
 - Wilds: 2s and jokers.
 - Deal: varies by round (see Rounds & Meld Requirements).

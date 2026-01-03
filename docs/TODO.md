@@ -84,6 +84,13 @@
   - [ ] Matchmaking
 - **Polish**
   - [ ] Add lobby / player names / turn animations
+- **More Players (Deck Scaling)**
+  - [x] Support room sizes up to 10 players (see README deck scaling rules)
+  - [x] Server: build multi-deck shoe based on room size
+  - [x] Server: enforce turn order and per-player state for N players
+  - [x] Client: render multiple opponent hands and meld areas
+  - [x] Client: show current player turn + count of opponents
+  - [x] Update rules/docs to reflect multiplayer limits and deck scaling
 
 ---
 
