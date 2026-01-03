@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { Game, ROUNDS } from "../src/engine/gameEngine.js";
-import { aiTurn } from "../src/engine/ai.js";
+import { aiTurn, chooseDrawSource } from "../src/engine/ai.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -228,6 +228,23 @@ function broadcastBuy(room, result) {
   room.sockets.forEach((socket) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(payload));
+    }
+  });
+}
+
+function queueAiBuys(room) {
+  if (!room.buyState || room.buyState.resolved || !room.game) return;
+  const game = room.game;
+  if (room.maxPlayers < 3) return;
+  const topDiscard = game.discardPile[game.discardPile.length - 1];
+  if (!topDiscard || topDiscard.cid !== room.buyState.discardCid) return;
+  room.aiSeats.forEach((isAi, idx) => {
+    if (!isAi) return;
+    if (idx === game.currentPlayerIndex) return;
+    if (room.buyState.requests.has(idx)) return;
+    const choice = chooseDrawSource(game, idx);
+    if (choice === "discard") {
+      room.buyState.requests.add(idx);
     }
   });
 }
@@ -688,6 +705,7 @@ wss.on("connection", (socket) => {
           requests: new Set(),
           resolved: false,
         };
+        queueAiBuys(room);
         if (game.checkWinAfterDiscard(player)) {
           game.applyRoundScores(playerIndex);
           room.phase = "game_over";
