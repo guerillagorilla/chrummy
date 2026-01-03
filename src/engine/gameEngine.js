@@ -141,6 +141,9 @@ export class Meld {
 
   add(card) {
     this.cards.push(card);
+    if (this.type === "run") {
+      this.cards = getSortedMeldCards(this);
+    }
   }
 }
 
