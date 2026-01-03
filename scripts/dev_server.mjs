@@ -13,6 +13,7 @@ const PORT = Number(process.env.PORT || 8000);
 const POLL_INTERVAL = 500;
 const ROOM_CODE_LENGTH = 4;
 const ROOM_IDLE_MS = 1000 * 60 * 5;
+const AI_TURN_DELAY_MS = 3000;
 
 let version = 0;
 const rooms = new Map();
@@ -47,6 +48,7 @@ function createRoom(maxPlayers) {
     aiSeats: Array.from({ length: size }, () => false),
     buyState: null,
     devMode: Array.from({ length: size }, () => false),
+    aiTimer: null,
   };
   rooms.set(code, room);
   return room;
@@ -252,28 +254,33 @@ function queueAiBuys(room) {
   });
 }
 
-function runAiTurns(room) {
+function scheduleAiTurn(room) {
   if (!room.game) return;
-  let acted = false;
-  let safety = 0;
-  while (room.phase === "await_draw" && room.aiSeats[room.game.currentPlayerIndex]) {
+  if (room.aiTimer) return;
+  if (room.phase !== "await_draw") return;
+  const current = room.game.currentPlayerIndex;
+  if (!room.aiSeats[current]) return;
+  room.aiTimer = setTimeout(() => {
+    room.aiTimer = null;
+    if (!room.game || room.phase !== "await_draw") return;
     const aiIndex = room.game.currentPlayerIndex;
+    if (!room.aiSeats[aiIndex]) return;
     aiTurn(room.game, aiIndex);
-    acted = true;
     if (room.game.checkWin(room.game.players[aiIndex])) {
       room.game.applyRoundScores(aiIndex);
       room.phase = "game_over";
       room.winnerIndex = aiIndex;
-      break;
+    } else {
+      room.phase = "await_draw";
+      room.game.currentPlayerIndex = (aiIndex + 1) % room.game.players.length;
     }
-    room.phase = "await_draw";
-    room.game.currentPlayerIndex = (aiIndex + 1) % room.game.players.length;
-    safety += 1;
-    if (safety > room.maxPlayers * 4) break;
-  }
-  if (acted) {
     broadcastState(room);
-  }
+    scheduleAiTurn(room);
+  }, AI_TURN_DELAY_MS);
+}
+
+function runAiTurns(room) {
+  scheduleAiTurn(room);
 }
 
 function sendError(socket, message) {
