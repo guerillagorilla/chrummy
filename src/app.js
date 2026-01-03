@@ -1025,16 +1025,20 @@ function maybePlayMultiplayerSounds(prevState, nextState) {
   const prevPhase = prevState.phase;
   const nextPhase = nextState.phase;
 
-  if (prevPhase === "await_draw" && nextPhase === "await_discard") {
+  const drewCard =
+    (prevPhase === "await_draw" && nextPhase === "await_discard") ||
+    (prevState.drawCount > nextState.drawCount);
+  if (drewCard) {
     playSound("draw");
   }
 
   const prevDiscard = prevState.discardTop?.cid;
   const nextDiscard = nextState.discardTop?.cid;
-  if (prevPhase === "await_discard" && (nextPhase === "await_draw" || nextPhase === "game_over")) {
-    if (prevDiscard !== nextDiscard) {
-      playSound("discard");
-    }
+  const discardedCard =
+    (prevPhase === "await_discard" && (nextPhase === "await_draw" || nextPhase === "game_over")) ||
+    prevDiscard !== nextDiscard;
+  if (discardedCard && prevDiscard !== nextDiscard) {
+    playSound("discard");
   }
 
   const prevOpponents = prevState.opponents ?? [];
