@@ -89,3 +89,11 @@ Rounds progress in order from 1 through 7.
 - AI does not count probabilities or track long-term card distributions.
 - AI does not model hidden information beyond “block opponent meld ranks.”
 - AI does not optimize endgame sequencing beyond the heuristics listed above.
+
+## Lessons Learned (Testing Notes)
+
+- Prefer deck draws when no progress is made for several turns; discard loops are common in later rounds.
+- Treat round meld sizes as minimums; larger sets/runs improve endgame flexibility and reduce stalls.
+- Dead discard matters: only the top discard is available, so tests must not allow deep discard pickup.
+- Run-heavy rounds benefit from a single-suit focus; spreading suits slows completion.
+- Wild layoff rules significantly change endgame outcomes; tests should cover wild layoff after laydown.
