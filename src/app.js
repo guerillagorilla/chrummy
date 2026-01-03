@@ -51,6 +51,7 @@ let lastTapTime = 0;
 let lastTapCardId = null;
 let lastPileTapTime = 0;
 let lastPileTapId = null;
+let buyPending = false;
 const soundFiles = {
   draw: "/public/assets/sounds/cockatrice/draw.wav",
   play: "/public/assets/sounds/cockatrice/playcard.wav",
@@ -965,7 +966,8 @@ function updateBuyControls(view) {
     Boolean(view?.buyAvailable) &&
     Boolean(view?.discardTop);
   buyBtn.classList.toggle("hidden", !multiplayerEnabled);
-  buyBtn.disabled = !canBuy;
+  buyBtn.disabled = !canBuy || buyPending;
+  buyBtn.textContent = buyPending ? "Buying..." : "Buy";
 }
 
 function updateLaydownControls(view) {
@@ -1099,6 +1101,9 @@ function handleSocketMessage(event) {
     if (pendingDiscardCardId) {
       pendingDiscardCardId = null;
     }
+    if (buyPending) {
+      buyPending = false;
+    }
     setMessage(msg.message);
     return;
   }
@@ -1129,6 +1134,9 @@ function handleSocketMessage(event) {
 
   if (msg.type === "buy_success") {
     const label = playerLabel(msg.buyerIndex, multiplayerState);
+    if (multiplayerPlayerIndex === msg.buyerIndex) {
+      buyPending = false;
+    }
     setMessage(`${label} bought the discard.`);
     playSound("ding");
     return;
@@ -1144,6 +1152,10 @@ function handleSocketMessage(event) {
     resetSelections();
     renderAll();
     updateMessageFromState();
+    if (buyPending && !multiplayerState.buyAvailable) {
+      buyPending = false;
+      updateBuyControls(multiplayerState);
+    }
     if (
       pendingDiscardCardId &&
       multiplayerState.phase === "await_discard" &&
@@ -1258,6 +1270,10 @@ if (buyBtn) {
       setMessage("Join a room first.");
       return;
     }
+    if (buyPending) return;
+    buyPending = true;
+    updateBuyControls(multiplayerState);
+    setMessage("Buy requested.");
     sendSocket({ type: "buy" });
   });
 }
