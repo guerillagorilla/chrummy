@@ -1,4 +1,4 @@
-import { Game, SuitSymbols, JokerRank, formatRequirements, ROUNDS } from "./engine/gameEngine.js";
+import { Game, SuitSymbols, JokerRank, formatRequirements, ROUNDS, getSortedMeldCards } from "./engine/gameEngine.js";
 import { aiTurn as aiTurnEngine } from "./engine/ai.js";
 import { aiTurn } from "./engine/ai.js";
 
@@ -411,7 +411,8 @@ function renderMelds(container, playerView, ownerIndex, { clear = true } = {}) {
     meldEl.dataset.ownerIndex = String(ownerIndex);
     meldEl.dataset.meldIndex = String(meldIndex);
     meldEl.dataset.staged = "true";
-    meld.cards.forEach((card) => {
+    const sortedCards = getSortedMeldCards(meld);
+    sortedCards.forEach((card) => {
       const cardEl = renderCard(card, { faceUp: true });
       meldEl.appendChild(cardEl);
     });
@@ -423,7 +424,8 @@ function renderMelds(container, playerView, ownerIndex, { clear = true } = {}) {
     meldEl.dataset.ownerIndex = String(ownerIndex);
     meldEl.dataset.meldIndex = String(meldIndex);
     meldEl.dataset.staged = "false";
-    meld.cards.forEach((card) => {
+    const sortedCards = getSortedMeldCards(meld);
+    sortedCards.forEach((card) => {
       const cardEl = renderCard(card, { faceUp: true });
       meldEl.appendChild(cardEl);
     });

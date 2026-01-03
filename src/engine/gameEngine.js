@@ -694,3 +694,68 @@ export const SuitSymbols = {
 
 export const Ranks = RANKS;
 export const JokerRank = JOKER;
+
+/**
+ * Returns meld cards sorted by effective rank position.
+ * For sets: naturals first, then wilds.
+ * For runs: cards sorted by their effective rank in the sequence,
+ *           with wilds assigned to fill gaps.
+ */
+export function getSortedMeldCards(meld) {
+  if (meld.type === "set") {
+    // Sets: naturals first, then wilds
+    const naturals = meld.cards.filter((c) => !c.isWild());
+    const wilds = meld.cards.filter((c) => c.isWild());
+    return [...naturals, ...wilds];
+  }
+
+  // Run: sort by effective position in the straight
+  const cards = [...meld.cards];
+  const naturals = cards.filter((c) => !c.isWild());
+  const wilds = cards.filter((c) => c.isWild());
+
+  if (naturals.length === 0) {
+    // All wilds - just return as-is
+    return cards;
+  }
+
+  // Find the natural card values
+  const naturalValues = naturals.map((c) => RANK_VALUES[c.rank]);
+  const minNatural = Math.min(...naturalValues);
+  const maxNatural = Math.max(...naturalValues);
+
+  // Determine the run range - try to find smallest valid range
+  const size = cards.length;
+  let runStart = null;
+  for (let start = 2; start <= 14 - size + 1; start += 1) {
+    const rangeEnd = start + size - 1;
+    if (minNatural >= start && maxNatural <= rangeEnd) {
+      runStart = start;
+      break;
+    }
+  }
+
+  if (runStart === null) {
+    // Shouldn't happen for valid meld, return as-is
+    return cards;
+  }
+
+  // Build sorted array: assign each position in the run
+  const sorted = [];
+  const usedNaturals = new Set();
+  const wildQueue = [...wilds];
+
+  for (let pos = runStart; pos < runStart + size; pos += 1) {
+    const natural = naturals.find(
+      (c) => RANK_VALUES[c.rank] === pos && !usedNaturals.has(c.cid)
+    );
+    if (natural) {
+      sorted.push(natural);
+      usedNaturals.add(natural.cid);
+    } else if (wildQueue.length > 0) {
+      sorted.push(wildQueue.shift());
+    }
+  }
+
+  return sorted;
+}

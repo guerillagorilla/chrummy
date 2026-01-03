@@ -74,6 +74,7 @@ Rounds progress in order from 1 through 7.
 
 - After drawing, AI tries to lay down the current round’s required melds (50% natural rule enforced).
 - AI then lays off any eligible cards if possible (after laying down).
+- AI melds are shown with ordered cards (sets: naturals then wilds; runs: wilds fill gaps in sequence) for readability.
 
 ### Discard behavior
 
