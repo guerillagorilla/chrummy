@@ -318,7 +318,7 @@ button.active {
   padding: 4px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.1);
-  height: 90px;
+  height: 110px;
   min-width: 130px;
   border: 2px solid transparent;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -340,35 +340,35 @@ button.active {
 }
 
 /* Width grows based on number of cards */
-.meld:has(.card:nth-child(4)) { min-width: 166px; }
-.meld:has(.card:nth-child(5)) { min-width: 202px; }
-.meld:has(.card:nth-child(6)) { min-width: 238px; }
-.meld:has(.card:nth-child(7)) { min-width: 274px; }
-.meld:has(.card:nth-child(8)) { min-width: 310px; }
-.meld:has(.card:nth-child(9)) { min-width: 346px; }
-.meld:has(.card:nth-child(10)) { min-width: 382px; }
+.meld:has(.card:nth-child(4)) { min-width: 208px; }
+.meld:has(.card:nth-child(5)) { min-width: 252px; }
+.meld:has(.card:nth-child(6)) { min-width: 298px; }
+.meld:has(.card:nth-child(7)) { min-width: 342px; }
+.meld:has(.card:nth-child(8)) { min-width: 388px; }
+.meld:has(.card:nth-child(9)) { min-width: 432px; }
+.meld:has(.card:nth-child(10)) { min-width: 478px; }
 
 .meld .card {
-  width: 50px;
-  height: 70px;
-  font-size: 10px;
+  width: 62px;
+  height: 88px;
+  font-size: 12px;
   position: absolute;
   transition: transform 0.2s;
 }
 
-.meld .card:nth-child(1) { left: 4px; transform: rotate(-6deg); z-index: 1; }
-.meld .card:nth-child(2) { left: 40px; transform: rotate(-3deg); z-index: 2; }
-.meld .card:nth-child(3) { left: 76px; transform: rotate(0deg); z-index: 3; }
-.meld .card:nth-child(4) { left: 112px; transform: rotate(3deg); z-index: 4; }
-.meld .card:nth-child(5) { left: 148px; transform: rotate(6deg); z-index: 5; }
-.meld .card:nth-child(6) { left: 184px; transform: rotate(9deg); z-index: 6; }
-.meld .card:nth-child(7) { left: 220px; transform: rotate(12deg); z-index: 7; }
-.meld .card:nth-child(8) { left: 256px; transform: rotate(15deg); z-index: 8; }
-.meld .card:nth-child(9) { left: 292px; transform: rotate(18deg); z-index: 9; }
-.meld .card:nth-child(10) { left: 328px; transform: rotate(21deg); z-index: 10; }
+.meld .card:nth-child(1) { left: 5px; transform: rotate(-6deg); z-index: 1; }
+.meld .card:nth-child(2) { left: 50px; transform: rotate(-3deg); z-index: 2; }
+.meld .card:nth-child(3) { left: 95px; transform: rotate(0deg); z-index: 3; }
+.meld .card:nth-child(4) { left: 140px; transform: rotate(3deg); z-index: 4; }
+.meld .card:nth-child(5) { left: 185px; transform: rotate(6deg); z-index: 5; }
+.meld .card:nth-child(6) { left: 230px; transform: rotate(9deg); z-index: 6; }
+.meld .card:nth-child(7) { left: 275px; transform: rotate(12deg); z-index: 7; }
+.meld .card:nth-child(8) { left: 320px; transform: rotate(15deg); z-index: 8; }
+.meld .card:nth-child(9) { left: 365px; transform: rotate(18deg); z-index: 9; }
+.meld .card:nth-child(10) { left: 410px; transform: rotate(21deg); z-index: 10; }
 
 .meld .card .suit {
-  font-size: 14px;
+  font-size: 18px;
 }
 
 .meld .card {
