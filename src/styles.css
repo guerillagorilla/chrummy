@@ -304,7 +304,7 @@ button.active {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
-  padding: 10px;
+  padding: 12px;
   border-radius: 8px;
   border: 1px dashed rgba(255, 255, 255, 0.2);
   align-content: flex-start;
@@ -319,9 +319,10 @@ button.active {
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.1);
   height: 110px;
-  min-width: 130px;
+  min-width: 145px;
   border: 2px solid transparent;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
 }
 
 .meld.staged {
@@ -339,14 +340,14 @@ button.active {
   box-shadow: 0 0 0 3px rgba(216, 178, 90, 0.2);
 }
 
-/* Width grows based on number of cards */
-.meld:has(.card:nth-child(4)) { min-width: 208px; }
-.meld:has(.card:nth-child(5)) { min-width: 252px; }
-.meld:has(.card:nth-child(6)) { min-width: 298px; }
-.meld:has(.card:nth-child(7)) { min-width: 342px; }
-.meld:has(.card:nth-child(8)) { min-width: 388px; }
-.meld:has(.card:nth-child(9)) { min-width: 432px; }
-.meld:has(.card:nth-child(10)) { min-width: 478px; }
+/* Width grows based on number of cards - card width 62px, spacing 32px */
+.meld:has(.card:nth-child(4)) { min-width: 175px; }
+.meld:has(.card:nth-child(5)) { min-width: 207px; }
+.meld:has(.card:nth-child(6)) { min-width: 239px; }
+.meld:has(.card:nth-child(7)) { min-width: 271px; }
+.meld:has(.card:nth-child(8)) { min-width: 303px; }
+.meld:has(.card:nth-child(9)) { min-width: 335px; }
+.meld:has(.card:nth-child(10)) { min-width: 367px; }
 
 .meld .card {
   width: 62px;
@@ -356,16 +357,17 @@ button.active {
   transition: transform 0.2s;
 }
 
-.meld .card:nth-child(1) { left: 5px; transform: rotate(-6deg); z-index: 1; }
-.meld .card:nth-child(2) { left: 50px; transform: rotate(-3deg); z-index: 2; }
-.meld .card:nth-child(3) { left: 95px; transform: rotate(0deg); z-index: 3; }
-.meld .card:nth-child(4) { left: 140px; transform: rotate(3deg); z-index: 4; }
-.meld .card:nth-child(5) { left: 185px; transform: rotate(6deg); z-index: 5; }
-.meld .card:nth-child(6) { left: 230px; transform: rotate(9deg); z-index: 6; }
-.meld .card:nth-child(7) { left: 275px; transform: rotate(12deg); z-index: 7; }
-.meld .card:nth-child(8) { left: 320px; transform: rotate(15deg); z-index: 8; }
-.meld .card:nth-child(9) { left: 365px; transform: rotate(18deg); z-index: 9; }
-.meld .card:nth-child(10) { left: 410px; transform: rotate(21deg); z-index: 10; }
+/* Cards overlap more tightly - 32px spacing */
+.meld .card:nth-child(1) { left: 5px; transform: rotate(-4deg); z-index: 1; }
+.meld .card:nth-child(2) { left: 37px; transform: rotate(-2deg); z-index: 2; }
+.meld .card:nth-child(3) { left: 69px; transform: rotate(0deg); z-index: 3; }
+.meld .card:nth-child(4) { left: 101px; transform: rotate(2deg); z-index: 4; }
+.meld .card:nth-child(5) { left: 133px; transform: rotate(4deg); z-index: 5; }
+.meld .card:nth-child(6) { left: 165px; transform: rotate(6deg); z-index: 6; }
+.meld .card:nth-child(7) { left: 197px; transform: rotate(8deg); z-index: 7; }
+.meld .card:nth-child(8) { left: 229px; transform: rotate(10deg); z-index: 8; }
+.meld .card:nth-child(9) { left: 261px; transform: rotate(12deg); z-index: 9; }
+.meld .card:nth-child(10) { left: 293px; transform: rotate(14deg); z-index: 10; }
 
 .meld .card .suit {
   font-size: 18px;
