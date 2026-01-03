@@ -1153,8 +1153,9 @@ function handleSocketMessage(event) {
     renderAll();
     updateMessageFromState();
     if (buyPending && !multiplayerState.buyAvailable) {
+      const wasDiscardTaken = prevState?.discardTop?.cid !== multiplayerState.discardTop?.cid;
       buyPending = false;
-      setMessage("Buy not awarded.");
+      setMessage(wasDiscardTaken ? "Discard taken by current player." : "Another player bought the discard.");
       updateBuyControls(multiplayerState);
     }
     if (
