@@ -152,6 +152,11 @@ button {
   cursor: default;
 }
 
+#buy-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 button.active {
   background: var(--danger);
   color: #fff;

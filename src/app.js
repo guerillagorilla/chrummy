@@ -24,6 +24,7 @@ const createRoomBtn = document.getElementById("create-room");
 const joinRoomBtn = document.getElementById("join-room");
 const addAiBtn = document.getElementById("add-ai");
 const leaveRoomBtn = document.getElementById("leave-room");
+const buyBtn = document.getElementById("buy-card");
 const roomSizeSelect = document.getElementById("room-size");
 const yourRowEl = document.querySelector(".your-row");
 
@@ -54,6 +55,7 @@ const soundFiles = {
   draw: "/public/assets/sounds/cockatrice/draw.wav",
   play: "/public/assets/sounds/cockatrice/playcard.wav",
   discard: "/public/assets/sounds/cockatrice/tap.wav",
+  ding: "/public/assets/sounds/cockatrice/stagechangeoldnotification.wav",
 };
 const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
 let audioContext = null;
@@ -581,6 +583,7 @@ function renderAll() {
   updateScore();
   updateRoundButtons(view);
   updateLaydownControls(view);
+  updateBuyControls(view);
 }
 
 function resetSelections() {
@@ -916,6 +919,19 @@ function updateRoundButtons(view) {
   }
 }
 
+function updateBuyControls(view) {
+  if (!buyBtn) return;
+  const canBuy =
+    multiplayerEnabled &&
+    view?.maxPlayers >= 3 &&
+    view?.phase === "await_draw" &&
+    !isPlayerTurn() &&
+    Boolean(view?.buyAvailable) &&
+    Boolean(view?.discardTop);
+  buyBtn.classList.toggle("hidden", !multiplayerEnabled);
+  buyBtn.disabled = !canBuy;
+}
+
 function updateLaydownControls(view) {
   if (!laydownSelectedBtn || !autoStageBtn) return;
   const phase = view?.phase ?? state;
@@ -1071,6 +1087,13 @@ function handleSocketMessage(event) {
     return;
   }
 
+  if (msg.type === "buy_success") {
+    const label = playerLabel(msg.buyerIndex, multiplayerState);
+    setMessage(`${label} bought the discard.`);
+    playSound("ding");
+    return;
+  }
+
   if (msg.type === "state") {
     const prevState = multiplayerState;
     multiplayerState = msg;
@@ -1185,6 +1208,16 @@ leaveRoomBtn.addEventListener("click", () => {
 if (addAiBtn) {
   addAiBtn.addEventListener("click", () => {
     addAiPlayer();
+  });
+}
+
+if (buyBtn) {
+  buyBtn.addEventListener("click", () => {
+    if (!multiplayerState) {
+      setMessage("Join a room first.");
+      return;
+    }
+    sendSocket({ type: "buy" });
   });
 }
 

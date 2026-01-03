@@ -15,6 +15,14 @@
 - After each round, the next round’s meld requirements apply.
 - Only the top discard is ever available. Any card covered by a new discard is dead and cannot be picked up later.
 
+## Buying Cards (3+ Players Only)
+
+- After a discard, non-current players may "Buy" the top discard before the next draw.
+- Buying costs two cards: the discard plus one extra card from the draw pile.
+- If multiple players buy, the closest player clockwise to the discarder wins.
+- The current player cannot buy; they draw normally on their turn.
+- Only one buy can happen per discard; buying does not skip the current player’s turn.
+
 ## Melds and Lay Downs
 
 - Required melds change by round (see Rounds & Meld Requirements).

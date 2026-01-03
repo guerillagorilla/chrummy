@@ -45,6 +45,7 @@ function createRoom(maxPlayers) {
     maxPlayers: size,
     resumePhase: null,
     aiSeats: Array.from({ length: size }, () => false),
+    buyState: null,
   };
   rooms.set(code, room);
   return room;
@@ -103,6 +104,14 @@ function stateForPlayer(room, playerIndex) {
   const connected = connectedCount(room);
   const ai = aiCount(room);
   const filled = connected + ai;
+  const topDiscard = room.game?.discardPile?.[room.game.discardPile.length - 1] ?? null;
+  const buyAvailable =
+    room.maxPlayers >= 3 &&
+    room.phase === "await_draw" &&
+    topDiscard &&
+    room.buyState &&
+    !room.buyState.resolved &&
+    room.buyState.discardCid === topDiscard.cid;
   if (!room.game) {
     return {
       type: "state",
@@ -120,6 +129,7 @@ function stateForPlayer(room, playerIndex) {
       ready: filled === room.maxPlayers,
       drawCount: 0,
       discardTop: null,
+      buyAvailable: false,
       you: {
         hand: [],
         melds: [],
@@ -160,7 +170,8 @@ function stateForPlayer(room, playerIndex) {
     maxPlayers: room.maxPlayers,
     ready: filled === room.maxPlayers,
     drawCount: game.drawPile.length,
-    discardTop: cardPayload(game.discardPile[game.discardPile.length - 1]),
+    discardTop: cardPayload(topDiscard),
+    buyAvailable,
     you: {
       hand: you.hand.map(cardPayload),
       melds: you.melds.map(meldPayload),
@@ -176,6 +187,47 @@ function broadcastState(room) {
   room.sockets.forEach((socket, idx) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(stateForPlayer(room, idx)));
+    }
+  });
+}
+
+function resolveBuy(room) {
+  const game = room.game;
+  if (!game || room.phase !== "await_draw") return null;
+  if (!room.buyState || room.buyState.resolved) return null;
+  if (!room.buyState.requests || room.buyState.requests.size === 0) return null;
+  const topDiscard = game.discardPile[game.discardPile.length - 1];
+  if (!topDiscard || topDiscard.cid !== room.buyState.discardCid) {
+    room.buyState = null;
+    return null;
+  }
+  const discarderIndex = (game.currentPlayerIndex - 1 + game.players.length) % game.players.length;
+  const eligible = [...room.buyState.requests].filter((idx) => idx !== game.currentPlayerIndex);
+  if (eligible.length === 0) return null;
+  const winnerIndex = eligible.reduce((best, idx) => {
+    const bestDist = (best - discarderIndex + game.players.length) % game.players.length;
+    const idxDist = (idx - discarderIndex + game.players.length) % game.players.length;
+    return idxDist < bestDist ? idx : best;
+  }, eligible[0]);
+  const buyer = game.players[winnerIndex];
+  const discardCard = game.drawFromDiscard(buyer);
+  const bonusCard = discardCard ? game.drawFromStock(buyer) : null;
+  room.buyState.resolved = true;
+  room.buyState.winnerIndex = winnerIndex;
+  room.buyState.requests.clear();
+  return { winnerIndex, discardCard, bonusCard };
+}
+
+function broadcastBuy(room, result) {
+  if (!result) return;
+  const payload = {
+    type: "buy_success",
+    buyerIndex: result.winnerIndex,
+    card: cardPayload(result.discardCard),
+  };
+  room.sockets.forEach((socket) => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(payload));
     }
   });
 }
@@ -422,6 +474,32 @@ wss.on("connection", (socket) => {
       return;
     }
 
+    if (msg.type === "buy") {
+      if (!room || playerIndex === null) {
+        sendError(socket, "Join a room first.");
+        return;
+      }
+      if (room.maxPlayers < 3) {
+        sendError(socket, "Buying is only available for 3+ players.");
+        return;
+      }
+      if (room.phase !== "await_draw") {
+        sendError(socket, "You can only buy after a discard.");
+        return;
+      }
+      if (!room.buyState || room.buyState.resolved) {
+        sendError(socket, "No card available to buy.");
+        return;
+      }
+      if (playerIndex === room.game.currentPlayerIndex) {
+        sendError(socket, "Current player cannot buy.");
+        return;
+      }
+      room.buyState.requests.add(playerIndex);
+      broadcastState(room);
+      return;
+    }
+
     if (!room || playerIndex === null) {
       sendError(socket, "Join a room first.");
       return;
@@ -451,7 +529,16 @@ wss.on("connection", (socket) => {
           sendError(socket, "Already drew.");
           return;
         }
+        const buyResult = resolveBuy(room);
+        if (buyResult) {
+          broadcastBuy(room, buyResult);
+          broadcastState(room);
+        }
         const source = msg.source === "discard" ? "discard" : "deck";
+        if (source === "discard" && room.buyState?.resolved) {
+          sendError(socket, "Discard was bought. Draw from deck.");
+          return;
+        }
         const player = game.players[playerIndex];
         const drawn = source === "discard" ? game.drawFromDiscard(player) : game.drawFromStock(player);
         if (!drawn) {
@@ -459,6 +546,7 @@ wss.on("connection", (socket) => {
           return;
         }
         room.phase = "await_discard";
+        room.buyState = null;
         broadcastState(room);
         runAiTurns(room);
         return;
@@ -595,6 +683,11 @@ wss.on("connection", (socket) => {
           game.clearStaged(player);
         }
         game.discard(player, card);
+        room.buyState = {
+          discardCid: card.cid,
+          requests: new Set(),
+          resolved: false,
+        };
         if (game.checkWinAfterDiscard(player)) {
           game.applyRoundScores(playerIndex);
           room.phase = "game_over";
@@ -617,6 +710,7 @@ wss.on("connection", (socket) => {
         room.game.nextRound();
         room.phase = "await_draw";
         room.winnerIndex = null;
+        room.buyState = null;
         broadcastState(room);
         runAiTurns(room);
         return;
