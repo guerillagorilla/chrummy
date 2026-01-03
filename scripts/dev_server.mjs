@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { Game, ROUNDS } from "../src/engine/gameEngine.js";
+import { aiTurn } from "../src/engine/ai.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,6 +44,7 @@ function createRoom(maxPlayers) {
     lastActive: Date.now(),
     maxPlayers: size,
     resumePhase: null,
+    aiSeats: Array.from({ length: size }, () => false),
   };
   rooms.set(code, room);
   return room;
@@ -52,8 +54,16 @@ function connectedCount(room) {
   return room.sockets.filter((socket) => socket && socket.readyState === WebSocket.OPEN).length;
 }
 
+function aiCount(room) {
+  return room.aiSeats.filter(Boolean).length;
+}
+
+function filledCount(room) {
+  return connectedCount(room) + aiCount(room);
+}
+
 function updateRoomPhase(room) {
-  const ready = connectedCount(room) === room.maxPlayers;
+  const ready = filledCount(room) === room.maxPlayers;
   if (ready) {
     if (!room.game) {
       room.game = new Game(room.maxPlayers, 0);
@@ -91,6 +101,8 @@ function meldPayload(meld) {
 
 function stateForPlayer(room, playerIndex) {
   const connected = connectedCount(room);
+  const ai = aiCount(room);
+  const filled = connected + ai;
   if (!room.game) {
     return {
       type: "state",
@@ -102,8 +114,10 @@ function stateForPlayer(room, playerIndex) {
       roundIndex: 0,
       round: ROUNDS[0],
       connectedCount: connected,
+      aiCount: ai,
+      filledCount: filled,
       maxPlayers: room.maxPlayers,
-      ready: connected === room.maxPlayers,
+      ready: filled === room.maxPlayers,
       drawCount: 0,
       discardTop: null,
       you: {
@@ -123,7 +137,8 @@ function stateForPlayer(room, playerIndex) {
     .filter(({ idx }) => idx !== playerIndex)
     .map(({ player, idx }) => ({
       playerIndex: idx,
-      connected: room.sockets[idx]?.readyState === WebSocket.OPEN,
+      connected: room.aiSeats[idx] || room.sockets[idx]?.readyState === WebSocket.OPEN,
+      isAi: room.aiSeats[idx],
       handCount: player.hand.length,
       melds: player.melds.map(meldPayload),
       stagedMelds: player.stagedMelds.map(meldPayload),
@@ -140,8 +155,10 @@ function stateForPlayer(room, playerIndex) {
     roundIndex: game.roundIndex,
     round: game.currentRound(),
     connectedCount: connected,
+    aiCount: ai,
+    filledCount: filled,
     maxPlayers: room.maxPlayers,
-    ready: connected === room.maxPlayers,
+    ready: filled === room.maxPlayers,
     drawCount: game.drawPile.length,
     discardTop: cardPayload(game.discardPile[game.discardPile.length - 1]),
     you: {
@@ -161,6 +178,25 @@ function broadcastState(room) {
       socket.send(JSON.stringify(stateForPlayer(room, idx)));
     }
   });
+}
+
+function runAiTurns(room) {
+  if (!room.game) return;
+  let safety = 0;
+  while (room.phase === "await_draw" && room.aiSeats[room.game.currentPlayerIndex]) {
+    const aiIndex = room.game.currentPlayerIndex;
+    aiTurn(room.game, aiIndex);
+    if (room.game.checkWin(room.game.players[aiIndex])) {
+      room.game.applyRoundScores(aiIndex);
+      room.phase = "game_over";
+      room.winnerIndex = aiIndex;
+      break;
+    }
+    room.phase = "await_draw";
+    room.game.currentPlayerIndex = (aiIndex + 1) % room.game.players.length;
+    safety += 1;
+    if (safety > room.maxPlayers * 4) break;
+  }
 }
 
 function sendError(socket, message) {
@@ -312,6 +348,7 @@ wss.on("connection", (socket) => {
       updateRoomPhase(room);
       socket.send(JSON.stringify({ type: "room_created", room: room.code, playerIndex }));
       broadcastState(room);
+      runAiTurns(room);
       return;
     }
 
@@ -323,7 +360,7 @@ wss.on("connection", (socket) => {
         return;
       }
       const isSlotOpen = (s) => !s || s.readyState !== WebSocket.OPEN;
-      const slot = target.sockets.findIndex(isSlotOpen);
+      const slot = target.sockets.findIndex((socket, idx) => isSlotOpen(socket) && !target.aiSeats[idx]);
       if (slot === -1) {
         sendError(socket, "Room is full.");
         return;
@@ -335,6 +372,28 @@ wss.on("connection", (socket) => {
       updateRoomPhase(room);
       socket.send(JSON.stringify({ type: "room_joined", room: room.code, playerIndex }));
       broadcastState(room);
+      runAiTurns(room);
+      return;
+    }
+
+    if (msg.type === "add_ai") {
+      if (!room) {
+        sendError(socket, "Join a room first.");
+        return;
+      }
+      const slot = room.aiSeats.findIndex((seat, idx) => {
+        if (seat) return false;
+        return !room.sockets[idx] || room.sockets[idx].readyState !== WebSocket.OPEN;
+      });
+      if (slot === -1) {
+        sendError(socket, "No open seats.");
+        return;
+      }
+      room.aiSeats[slot] = true;
+      room.lastActive = Date.now();
+      updateRoomPhase(room);
+      broadcastState(room);
+      runAiTurns(room);
       return;
     }
 
@@ -351,6 +410,7 @@ wss.on("connection", (socket) => {
           }
         });
         broadcastState(room);
+        runAiTurns(room);
       }
       room = null;
       playerIndex = null;
@@ -395,6 +455,7 @@ wss.on("connection", (socket) => {
         }
         room.phase = "await_discard";
         broadcastState(room);
+        runAiTurns(room);
         return;
       }
 
@@ -409,6 +470,7 @@ wss.on("connection", (socket) => {
           return;
         }
         broadcastState(room);
+        runAiTurns(room);
         return;
       }
 
@@ -428,6 +490,7 @@ wss.on("connection", (socket) => {
           return;
         }
         broadcastState(room);
+        runAiTurns(room);
         return;
       }
 
@@ -450,6 +513,7 @@ wss.on("connection", (socket) => {
         }
         game.stageCard(player, card, meldIndex);
         broadcastState(room);
+        runAiTurns(room);
         return;
       }
 
@@ -471,6 +535,7 @@ wss.on("connection", (socket) => {
         }
         game.unstageCard(player, card);
         broadcastState(room);
+        runAiTurns(room);
         return;
       }
 
@@ -482,8 +547,11 @@ wss.on("connection", (socket) => {
         const meldOwner = Number(msg.meldOwner);
         const meldIndex = Number(msg.meldIndex);
         const cardId = Number(msg.cardId);
-        const owner = meldOwner === 1 ? 1 : 0;
-        const meld = game.players[owner].melds[meldIndex];
+        if (!Number.isFinite(meldOwner) || meldOwner < 0 || meldOwner >= game.players.length) {
+          sendError(socket, "Invalid layoff.");
+          return;
+        }
+        const meld = game.players[meldOwner].melds[meldIndex];
         const card = game.players[playerIndex].hand.find((c) => c.cid === cardId);
         if (!card || !meld) {
           sendError(socket, "Invalid layoff.");
@@ -498,9 +566,11 @@ wss.on("connection", (socket) => {
           room.phase = "game_over";
           room.winnerIndex = playerIndex;
           broadcastState(room);
+          runAiTurns(room);
           return;
         }
         broadcastState(room);
+        runAiTurns(room);
         return;
       }
 
@@ -529,6 +599,7 @@ wss.on("connection", (socket) => {
           game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
         }
         broadcastState(room);
+        runAiTurns(room);
         return;
       }
 
@@ -542,6 +613,7 @@ wss.on("connection", (socket) => {
         room.phase = "await_draw";
         room.winnerIndex = null;
         broadcastState(room);
+        runAiTurns(room);
         return;
       }
     }
@@ -554,6 +626,7 @@ wss.on("connection", (socket) => {
       room.lastActive = Date.now();
       updateRoomPhase(room);
       broadcastState(room);
+      runAiTurns(room);
     }
   });
 });

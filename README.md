@@ -41,6 +41,7 @@ See `docs/rules.md` for detailed gameplay rules, including the 7-round progressi
 - Drag cards onto the discard pile to discard.
 - Drag a card onto a meld to place it (after laying down).
 - Select a room size (2–10) before Create to set multiplayer player count.
+- Use Add AI to fill open seats with bots while in a multiplayer room.
 
 ## Panel Reference
 

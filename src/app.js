@@ -22,6 +22,7 @@ const devModeToggle = document.getElementById("dev-mode");
 const roomCodeInput = document.getElementById("room-code");
 const createRoomBtn = document.getElementById("create-room");
 const joinRoomBtn = document.getElementById("join-room");
+const addAiBtn = document.getElementById("add-ai");
 const leaveRoomBtn = document.getElementById("leave-room");
 const roomSizeSelect = document.getElementById("room-size");
 const yourRowEl = document.querySelector(".your-row");
@@ -203,8 +204,10 @@ function multiplayerReady() {
 
 function waitingForPlayersMessage() {
   const connected = multiplayerState?.connectedCount ?? 0;
+  const aiCount = multiplayerState?.aiCount ?? 0;
   const maxPlayers = multiplayerState?.maxPlayers ?? 2;
-  return `Waiting for players (${connected}/${maxPlayers})...`;
+  const filled = connected + aiCount;
+  return `Waiting for players (${filled}/${maxPlayers})...`;
 }
 
 function playerLabel(index, view) {
@@ -214,6 +217,13 @@ function playerLabel(index, view) {
     return index === 1 ? "Opponent" : `Player ${index + 1}`;
   }
   return index === multiplayerPlayerIndex ? "You" : `Player ${index + 1}`;
+}
+
+function opponentLabel(opponent, view) {
+  const base = playerLabel(opponent.playerIndex, view);
+  if (!opponent.isAi) return base;
+  if (base === "Opponent") return "AI Opponent";
+  return `AI ${base}`;
 }
 
 function isPlayerTurn() {
@@ -463,7 +473,7 @@ function renderOpponentHands(view) {
     }
     const label = document.createElement("div");
     label.className = "opponent-label";
-    label.textContent = playerLabel(opponent.playerIndex, view);
+    label.textContent = opponentLabel(opponent, view);
     const hand = document.createElement("div");
     hand.className = "hand opponent-hand";
     if (view.mode === "local" && Array.isArray(opponent.hand)) {
@@ -505,7 +515,7 @@ function renderOpponentMeldGroups(view) {
     group.className = "meld-group";
     const label = document.createElement("div");
     label.className = "meld-group-label";
-    label.textContent = playerLabel(opponent.playerIndex, view);
+    label.textContent = opponentLabel(opponent, view);
     const grid = document.createElement("div");
     grid.className = "meld-grid meld-grid-group";
     renderMelds(grid, opponent, opponent.playerIndex);
@@ -1085,6 +1095,14 @@ function leaveRoom() {
   }
 }
 
+function addAiPlayer() {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    setMessage("Not connected to server.");
+    return;
+  }
+  sendSocket({ type: "add_ai" });
+}
+
 function leaveRoomCleanup() {
   multiplayerEnabled = false;
   multiplayerState = null;
@@ -1102,6 +1120,9 @@ function leaveRoomCleanup() {
 function showRoomControls(inRoom) {
   createRoomBtn.classList.toggle("hidden", inRoom);
   joinRoomBtn.classList.toggle("hidden", inRoom);
+  if (addAiBtn) {
+    addAiBtn.classList.toggle("hidden", !inRoom);
+  }
   leaveRoomBtn.classList.toggle("hidden", !inRoom);
   roomCodeInput.readOnly = inRoom;
   if (roomSizeSelect) {
@@ -1120,6 +1141,12 @@ joinRoomBtn.addEventListener("click", () => {
 leaveRoomBtn.addEventListener("click", () => {
   leaveRoom();
 });
+
+if (addAiBtn) {
+  addAiBtn.addEventListener("click", () => {
+    addAiPlayer();
+  });
+}
 
 roomCodeInput.addEventListener("input", () => {
   roomCodeInput.value = roomCodeInput.value.toUpperCase().replace(/[^A-Z]/g, "");
