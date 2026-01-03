@@ -51,9 +51,10 @@ const soundFiles = {
   play: "/public/assets/sounds/cockatrice/playcard.wav",
   discard: "/public/assets/sounds/cockatrice/tap.wav",
 };
-const sounds = Object.fromEntries(
-  Object.entries(soundFiles).map(([key, src]) => [key, new Audio(src)]),
-);
+const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+let audioContext = null;
+let audioUnlocked = false;
+const soundBuffers = new Map();
 const RANK_VALUES = {
   "2": 2,
   "3": 3,
@@ -88,13 +89,60 @@ function setMessage(text, state = "normal") {
 }
 
 function playSound(key) {
-  const base = sounds[key];
-  if (!base) return;
-  const audio = base.cloneNode();
-  audio.volume = 0.6;
-  audio.play().catch(() => {
-    // Audio may be blocked until user interaction; ignore silently.
-  });
+  if (!audioUnlocked || !audioContext) return;
+  const buffer = soundBuffers.get(key);
+  if (!buffer) {
+    loadSoundBuffer(key).then((loaded) => {
+      if (!loaded || !audioContext) return;
+      const source = audioContext.createBufferSource();
+      const gain = audioContext.createGain();
+      gain.gain.value = 0.6;
+      source.buffer = loaded;
+      source.connect(gain).connect(audioContext.destination);
+      source.start(0);
+    }).catch(() => {});
+    return;
+  }
+  const source = audioContext.createBufferSource();
+  const gain = audioContext.createGain();
+  gain.gain.value = 0.6;
+  source.buffer = buffer;
+  source.connect(gain).connect(audioContext.destination);
+  source.start(0);
+}
+
+async function loadSoundBuffer(key) {
+  if (!audioContext) return null;
+  if (soundBuffers.has(key)) return soundBuffers.get(key);
+  const url = soundFiles[key];
+  if (!url) return null;
+  const response = await fetch(url);
+  const data = await response.arrayBuffer();
+  const buffer = await audioContext.decodeAudioData(data);
+  soundBuffers.set(key, buffer);
+  return buffer;
+}
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+  if (!AudioContextCtor) return;
+  audioContext = audioContext || new AudioContextCtor();
+  audioContext.resume().then(() => {
+    audioUnlocked = true;
+    Object.keys(soundFiles).forEach((key) => {
+      loadSoundBuffer(key).catch(() => {});
+    });
+  }).catch(() => {});
+}
+
+function registerAudioUnlock() {
+  const handler = () => {
+    unlockAudio();
+  };
+  document.addEventListener("pointerdown", handler, { once: true });
+  document.addEventListener("touchstart", handler, { once: true });
+  document.addEventListener("mousedown", handler, { once: true });
+  document.addEventListener("keydown", handler, { once: true });
 }
 
 function buildLocalView() {
@@ -1447,6 +1495,7 @@ function enableDragAndDrop() {
 }
 
 enableDragAndDrop();
+registerAudioUnlock();
 const initialRoom = new URLSearchParams(location.search).get("room");
 if (initialRoom) {
   roomCodeInput.value = initialRoom;
