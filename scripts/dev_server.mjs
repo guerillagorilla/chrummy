@@ -182,10 +182,12 @@ function broadcastState(room) {
 
 function runAiTurns(room) {
   if (!room.game) return;
+  let acted = false;
   let safety = 0;
   while (room.phase === "await_draw" && room.aiSeats[room.game.currentPlayerIndex]) {
     const aiIndex = room.game.currentPlayerIndex;
     aiTurn(room.game, aiIndex);
+    acted = true;
     if (room.game.checkWin(room.game.players[aiIndex])) {
       room.game.applyRoundScores(aiIndex);
       room.phase = "game_over";
@@ -196,6 +198,9 @@ function runAiTurns(room) {
     room.game.currentPlayerIndex = (aiIndex + 1) % room.game.players.length;
     safety += 1;
     if (safety > room.maxPlayers * 4) break;
+  }
+  if (acted) {
+    broadcastState(room);
   }
 }
 
