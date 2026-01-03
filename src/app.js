@@ -1154,6 +1154,7 @@ function handleSocketMessage(event) {
     updateMessageFromState();
     if (buyPending && !multiplayerState.buyAvailable) {
       buyPending = false;
+      setMessage("Buy not awarded.");
       updateBuyControls(multiplayerState);
     }
     if (
