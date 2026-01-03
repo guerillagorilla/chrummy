@@ -898,8 +898,9 @@ devModeToggle.addEventListener("change", (event) => {
 });
 
 function setMultiplayerEnabled(enabled) {
+  const wasEnabled = multiplayerEnabled;
   multiplayerEnabled = enabled;
-  if (enabled) {
+  if (enabled && !wasEnabled) {
     opponentLogEl.innerHTML = "";
     revealOpponentCardId = null;
   }
