@@ -19,6 +19,7 @@
 
 - Required melds change by round (see Rounds & Meld Requirements).
 - A valid set is X-of-a-kind (rank matches), and a valid run is a straight flush (same suit, consecutive ranks).
+- Round requirements are minimums: a required 3-of-a-kind can be 4+ cards, and a required 4-card straight flush can be 5+ cards, as long as it stays a straight flush.
 - Each required meld must be at least 50% natural (non-wild).
   - Example valid: 7♣ 7♥ 2♠ (2 is wild).
   - Example invalid: 7♣ 2♥ 🃏 (two wilds in a 3-card meld).
@@ -45,7 +46,7 @@ Rounds progress in order from 1 through 7.
 
 ## Reshuffle
 
-- If the draw pile runs out, the dealer shuffles all non-hand cards to create a new draw pile.
+- If the draw pile runs out, shuffle the dead discard pile (covered discards) to form a new draw pile and keep the top discard.
 
 ## Scoring
 
@@ -61,12 +62,11 @@ Rounds progress in order from 1 through 7.
 
 ### Draw behavior
 
-- Takes discard only if it helps AI or blocks opponent:
-  - If discard is wild, take it.
-  - If discard matches a rank already in AI’s hand, take it. (Rank = face value: A, 2, 3, …, 10, J, Q, K.)
-  - If discard matches a rank in AI’s melds, take it.
-  - If discard matches a rank in opponent’s melds, take it (deny).
+- Before laying down, take the discard only if it is wild or immediately enables the full round laydown.
+- If the AI has gone several turns without progress, it favors drawing from the deck unless the discard immediately completes the round.
 - Once AI has laid down, it only takes discard if the top card can be laid off immediately.
+- AI avoids picking up a discard it just threw away unless it enables an immediate lay down.
+- AI avoids discarding a card it just picked from the discard pile unless forced.
 - Otherwise draws from the deck.
 
 ### Lay down / lay off

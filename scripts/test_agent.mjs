@@ -1,7 +1,7 @@
 // Test agent that plays the game automatically using the real AI
 // Run with: node scripts/test_agent.mjs
 
-import { Game, JokerRank } from "../src/engine/gameEngine.js";
+import { Game, JokerRank, formatRequirements, ROUNDS, canLayDownWithCards } from "../src/engine/gameEngine.js";
 import { aiTurn } from "../src/engine/ai.js";
 
 function cardLabel(card) {
@@ -28,12 +28,12 @@ function meldsStr(melds) {
   return melds.map(m => m.cards.map(cardLabel).join(",")).join(" | ");
 }
 
-function playGame() {
-  const game = new Game(2, 1); // Dealer is opponent, so You go first
+function playRound(game, roundNumber) {
   let turn = 0;
-  const maxTurns = 100;
+  const maxTurns = 200;
+  const roundSummary = formatRequirements(game.currentRound().requirements);
 
-  console.log("=== Starting Game ===");
+  console.log(`=== Round ${roundNumber + 1}: ${roundSummary} ===`);
   console.log(`You:      ${handStr(game.players[0].hand)}`);
   console.log(`Opponent: ${handStr(game.players[1].hand)}`);
   console.log(`Discard:  ${cardLabel(game.discardPile[game.discardPile.length - 1])}`);
@@ -43,49 +43,57 @@ function playGame() {
     turn++;
     const playerIndex = game.currentPlayerIndex;
     const playerName = playerIndex === 0 ? "You" : "Opp";
+    const player = game.players[playerIndex];
+    const startSize = player.hand.length;
 
-    // Both players use the real AI
     const result = aiTurn(game, playerIndex);
-    
-    // Format output
     const drawInfo = result.drewCard ? `+${cardLabel(result.drewCard)} (${result.drawChoice})` : "(no draw)";
     console.log(`T${turn} ${playerName}: ${drawInfo}`);
-    
-    // Show lay down
-    const player = game.players[playerIndex];
-    if (result.log.some(l => l.includes("Laid down"))) {
+
+    if (result.log.some((entry) => entry.includes("Laid down"))) {
       console.log(`  *** LAY DOWN! ${meldsStr(player.melds)}`);
     }
-    
-    // Show lay off
-    if (result.log.some(l => l.includes("Laid off"))) {
-      const layoffLog = result.log.find(l => l.includes("Laid off"));
+
+    if (result.log.some((entry) => entry.includes("Laid off"))) {
+      const layoffLog = result.log.find((entry) => entry.includes("Laid off"));
       console.log(`  ${layoffLog}`);
     }
-    
-    // Show discard and hand
+
     const discardStr = result.discarded ? `-${cardLabel(result.discarded)}` : "(no discard)";
     console.log(`  ${discardStr} | Hand: ${handStr(player.hand)}`);
-    
-    // Check win after discard
-    if (player.hand.length === 0 && player.hasLaidDown) {
-      console.log(`\n=== ${playerName} WINS! ===`);
+
+    if (game.checkWin(player)) {
+      console.log(`\n=== ${playerName} WINS ROUND ${roundNumber + 1}! ===`);
       console.log(`Your melds: ${meldsStr(game.players[0].melds)}`);
       console.log(`Opp melds:  ${meldsStr(game.players[1].melds)}`);
       console.log(`Your hand:  ${handStr(game.players[0].hand) || "(empty)"}`);
       console.log(`Opp hand:   ${handStr(game.players[1].hand) || "(empty)"}`);
-      return;
+      game.applyRoundScores(playerIndex);
+      return playerIndex;
     }
 
-    // Next player
     game.currentPlayerIndex = (game.currentPlayerIndex + 1) % 2;
   }
 
-  console.log("\nGame exceeded max turns!");
-  console.log(`Your melds: ${meldsStr(game.players[0].melds)}`);
-  console.log(`Opp melds:  ${meldsStr(game.players[1].melds)}`);
-  console.log(`Your hand:  ${handStr(game.players[0].hand)}`);
-  console.log(`Opp hand:   ${handStr(game.players[1].hand)}`);
+  console.log("\nRound exceeded max turns!");
+  return null;
+}
+
+function playGame(rounds = ROUNDS.length) {
+  const game = new Game(2, 1); // Dealer is opponent, so You go first
+  console.log("=== Starting Game ===");
+  for (let round = 0; round < rounds; round += 1) {
+    const winner = playRound(game, round);
+    if (winner === null) {
+      break;
+    }
+    if (round < rounds - 1) {
+      game.dealerIndex = (game.dealerIndex + 1) % 2;
+      game.nextRound();
+      console.log("");
+    }
+  }
+  console.log(`Final score: You ${game.players[0].totalScore} | Opponent ${game.players[1].totalScore}`);
 }
 
 playGame();

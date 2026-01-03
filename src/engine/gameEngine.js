@@ -152,6 +152,9 @@ export class Player {
     this.stagedMelds = [];
     this.hasLaidDown = false;
     this.totalScore = 0;
+    this.lastDiscardedRank = null;
+    this.lastDiscardedId = null;
+    this.aiNoProgressTurns = 0;
   }
 }
 
@@ -268,25 +271,32 @@ function makeMeld(requirement, cards) {
   });
 }
 
-function findMeldOptions(hand, requirement) {
+function findMeldOptions(hand, requirement, maxSize = hand.length) {
   const options = [];
-  for (const combo of combinations(hand, requirement.size)) {
-    if (requirement.type === "set" && canFormSet(combo, true)) {
-      options.push(makeMeld(requirement, combo));
-    }
-    if (requirement.type === "run" && canFormRun(combo, true)) {
-      options.push(makeMeld(requirement, combo));
+  const startSize = requirement.size;
+  const endSize = Math.max(startSize, Math.min(maxSize, hand.length));
+  for (let size = endSize; size >= startSize; size -= 1) {
+    for (const combo of combinations(hand, size)) {
+      if (requirement.type === "set" && canFormSet(combo, true)) {
+        options.push(makeMeld(requirement, combo));
+      }
+      if (requirement.type === "run" && canFormRun(combo, true)) {
+        options.push(makeMeld(requirement, combo));
+      }
     }
   }
   return options;
 }
 
-function findMeldsForRequirements(hand, requirements) {
+function findMeldsForRequirements(hand, requirements, { useAll = false } = {}) {
   const options = requirements.map((req) => findMeldOptions(hand, req));
   const used = new Set();
 
   function backtrack(reqIndex) {
-    if (reqIndex === requirements.length) return [];
+    if (reqIndex === requirements.length) {
+      if (useAll && used.size !== hand.length) return null;
+      return [];
+    }
     for (const meld of options[reqIndex]) {
       const meldIds = meld.cards.map((card) => card.cid);
       if (meldIds.some((cid) => used.has(cid))) continue;
@@ -303,6 +313,14 @@ function findMeldsForRequirements(hand, requirements) {
 
 export function findTwoMelds(hand) {
   return findMeldsForRequirements(hand, ROUNDS[0].requirements);
+}
+
+export function canLayDownWithCards(hand, requirements) {
+  return Boolean(findMeldsForRequirements(hand, requirements));
+}
+
+export function canLayDownWithCard(hand, card, requirements) {
+  return Boolean(findMeldsForRequirements([...hand, card], requirements));
 }
 
 export class Game {
@@ -330,6 +348,7 @@ export class Game {
       player.melds = [];
       player.stagedMelds = [];
       player.hasLaidDown = false;
+      player.aiNoProgressTurns = 0;
     }
     this.deadPile = [];
 
@@ -390,6 +409,8 @@ export class Game {
 
   discard(player, card) {
     player.hand = player.hand.filter((c) => c.cid !== card.cid);
+    player.lastDiscardedRank = card.rank;
+    player.lastDiscardedId = card.cid;
     if (this.discardPile.length > 0) {
       this.deadPile.push(...this.discardPile);
       this.discardPile = [];
@@ -414,11 +435,9 @@ export class Game {
   tryLayDownWithCards(player, cards) {
     if (player.hasLaidDown) return false;
     const requirements = this.currentRound().requirements;
-    const neededCount = requirements.reduce((sum, req) => sum + req.size, 0);
-    if (cards.length !== neededCount) return false;
     const handIds = new Set(player.hand.map((card) => card.cid));
     if (!cards.every((card) => handIds.has(card.cid))) return false;
-    const melds = findMeldsForRequirements(cards, requirements);
+    const melds = findMeldsForRequirements(cards, requirements, { useAll: true });
     if (!melds) return false;
     for (const meld of melds) {
       for (const card of meld.cards) {
@@ -477,7 +496,7 @@ export class Game {
     const assignment = [];
 
     function matchesRequirement(meld, req) {
-      if (meld.cards.length !== req.size) return false;
+      if (meld.cards.length < req.size) return false;
       if (req.type === "set") return canFormSet(meld.cards, true);
       return canFormRun(meld.cards, true);
     }
@@ -645,21 +664,21 @@ export class Game {
 
   reshuffleNonHandCards() {
     const pool = [];
-    for (const player of this.players) {
-      for (const meld of player.melds) {
-        pool.push(...meld.cards);
-      }
-      player.melds = [];
-      player.hasLaidDown = false;
+    const topDiscard = this.discardPile.length > 0 ? this.discardPile[this.discardPile.length - 1] : null;
+    if (this.discardPile.length > 1) {
+      pool.push(...this.discardPile.slice(0, -1));
     }
-    pool.push(...this.discardPile);
-    this.discardPile = [];
+    if (this.deadPile.length > 0) {
+      pool.push(...this.deadPile);
+    }
+    this.deadPile = [];
+    this.discardPile = topDiscard ? [topDiscard] : [];
     for (let i = pool.length - 1; i > 0; i -= 1) {
       const j = Math.floor(Math.random() * (i + 1));
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
     this.drawPile = pool;
-    if (this.drawPile.length > 0) {
+    if (this.discardPile.length === 0 && this.drawPile.length > 0) {
       this.discardPile.push(this.drawPile.shift());
     }
   }
