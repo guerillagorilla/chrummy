@@ -45,6 +45,7 @@ let revealOpponentCardId = null;
 let revealTimer = null;
 let insertMarkerEl = null;
 let pendingDiscardCardId = null;
+let manualHandOrder = [];
 let lastTapTime = 0;
 let lastTapCardId = null;
 let lastPileTapTime = 0;
@@ -240,6 +241,40 @@ function youHasLaidDown() {
 
 function getYourHand() {
   return multiplayerState ? multiplayerState.you.hand : game.players[0].hand;
+}
+
+function syncManualHandOrder(hand) {
+  if (!multiplayerState) return;
+  const ids = hand.map((card) => card.cid);
+  if (manualHandOrder.length === 0) {
+    manualHandOrder = [...ids];
+    return;
+  }
+  const idSet = new Set(ids);
+  manualHandOrder = manualHandOrder.filter((id) => idSet.has(id));
+  ids.forEach((id) => {
+    if (!manualHandOrder.includes(id)) {
+      manualHandOrder.push(id);
+    }
+  });
+}
+
+function orderHandForDisplay(hand) {
+  if (!multiplayerState || manualHandOrder.length === 0) {
+    return hand;
+  }
+  const byId = new Map(hand.map((card) => [card.cid, card]));
+  const ordered = [];
+  manualHandOrder.forEach((id) => {
+    const card = byId.get(id);
+    if (card) ordered.push(card);
+  });
+  byId.forEach((card, id) => {
+    if (!manualHandOrder.includes(id)) {
+      ordered.push(card);
+    }
+  });
+  return ordered;
 }
 
 function getOpponentMelds() {
@@ -531,7 +566,8 @@ function renderAll() {
   if (opponentLogPanel) {
     opponentLogPanel.classList.toggle("hidden", !devMode);
   }
-  const handToRender = autoSortEnabled ? sortHand(view.you.hand) : view.you.hand;
+  const baseHand = autoSortEnabled ? sortHand(view.you.hand) : view.you.hand;
+  const handToRender = autoSortEnabled ? baseHand : orderHandForDisplay(baseHand);
   renderHand(yourHandEl, handToRender, {
     faceUp: true,
     selectable: true,
@@ -1038,6 +1074,7 @@ function handleSocketMessage(event) {
   if (msg.type === "state") {
     const prevState = multiplayerState;
     multiplayerState = msg;
+    syncManualHandOrder(multiplayerState.you.hand);
     maybePlayMultiplayerSounds(prevState, multiplayerState);
     setMultiplayerEnabled(true);
     resetSelections();
@@ -1110,6 +1147,7 @@ function leaveRoomCleanup() {
   multiplayerState = null;
   multiplayerRoom = null;
   multiplayerPlayerIndex = null;
+  manualHandOrder = [];
   roomCodeInput.value = "";
   showRoomControls(false);
   const url = new URL(location.href);
@@ -1364,6 +1402,23 @@ function enableDragAndDrop() {
   }
 
   function moveCardInHand(cardId, toIndex) {
+    if (multiplayerState) {
+      if (autoSortEnabled) return false;
+      const hand = getYourHand();
+      const handIds = hand.map((card) => card.cid);
+      if (manualHandOrder.length === 0) {
+        manualHandOrder = [...handIds];
+      }
+      const filtered = manualHandOrder.filter((id) => handIds.includes(id));
+      const fromIndex = filtered.indexOf(cardId);
+      if (fromIndex === -1 || toIndex === -1 || toIndex === undefined) return false;
+      if (fromIndex === toIndex) return false;
+      filtered.splice(fromIndex, 1);
+      const adjustedToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+      filtered.splice(adjustedToIndex, 0, cardId);
+      manualHandOrder = filtered;
+      return true;
+    }
     const hand = getYourHand();
     const fromIndex = hand.findIndex((card) => card.cid === cardId);
     if (fromIndex === -1 || toIndex === -1 || toIndex === undefined) return false;
