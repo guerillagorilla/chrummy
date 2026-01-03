@@ -132,6 +132,35 @@ function cardCompletesRound(game, playerIndex, card) {
   return canLayDownWithCard(hand, card, round.requirements);
 }
 
+function bestRunSuitForRound(game, playerIndex) {
+  const round = game.currentRound();
+  if (!round) return null;
+  const runReq = round.requirements.find((req) => req.type === "run");
+  if (!runReq) return null;
+  const hand = game.players[playerIndex].hand;
+  const suitRanks = countSuitRanks(hand);
+  const wilds = hand.filter(isWild).length;
+  let bestSuit = null;
+  let bestScore = -1;
+  for (const [suit, ranks] of suitRanks.entries()) {
+    let score = 0;
+    for (let start = 2; start <= 14 - runReq.size + 1; start += 1) {
+      let naturals = 0;
+      for (let offset = 0; offset < runReq.size; offset += 1) {
+        if (ranks.has(start + offset)) naturals += 1;
+      }
+      if (naturals === 0) continue;
+      const canComplete = naturals + wilds >= runReq.size;
+      score = Math.max(score, (canComplete ? 2 : 1) * naturals);
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestSuit = suit;
+    }
+  }
+  return bestSuit;
+}
+
 function keepCardsForRound(game, playerIndex) {
   const round = game.currentRound();
   const hand = game.players[playerIndex].hand;
@@ -177,6 +206,7 @@ export function chooseDrawSource(game, playerIndex) {
   const player = game.players[playerIndex];
   const isWildDiscard = topDiscard.rank === "2" || topDiscard.rank === JokerRank;
   const desperation = player.aiNoProgressTurns >= 6;
+  const bestRunSuit = bestRunSuitForRound(game, playerIndex);
   if (player.hasLaidDown) {
     return game.canLayOffCard(topDiscard) ? "discard" : "deck";
   }
@@ -184,6 +214,8 @@ export function chooseDrawSource(game, playerIndex) {
 
   const completesRound = cardCompletesRound(game, playerIndex, topDiscard);
   const supportsRound = cardSupportsRound(game, playerIndex, topDiscard);
+  const supportsRunSuit =
+    bestRunSuit && topDiscard.suit === bestRunSuit && supportsRound;
   if (
     (player.lastDiscardedId === topDiscard.cid ||
       player.lastDiscardedRank === topDiscard.rank) &&
@@ -194,7 +226,7 @@ export function chooseDrawSource(game, playerIndex) {
 
   if (completesRound) return "discard";
   if (desperation) return "deck";
-  return supportsRound ? "discard" : "deck";
+  return supportsRunSuit || supportsRound ? "discard" : "deck";
 }
 
 export function chooseDiscard(hand, avoidRanks, keepRanks, keepCards, forbiddenIds = new Set()) {
@@ -313,7 +345,15 @@ export function aiTurn(game, playerIndex) {
 
   const avoidRanks = game.opponentMeldRanks(playerIndex);
   const keepRanks = game.meldRanksFor(playerIndex);
+  const bestRunSuit = bestRunSuitForRound(game, playerIndex);
   const keepCards = keepCardsForRound(game, playerIndex);
+  if (bestRunSuit) {
+    for (const card of player.hand) {
+      if (!card.isWild() && card.suit === bestRunSuit) {
+        keepCards.add(card.cid);
+      }
+    }
+  }
   const forbiddenIds = new Set();
   if (drawChoice === "discard" && drawn) {
     forbiddenIds.add(drawn.cid);
