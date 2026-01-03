@@ -74,7 +74,7 @@ Rounds progress in order from 1 through 7.
 - If the AI has gone several turns without progress, it favors drawing from the deck unless the discard immediately completes the round.
 - When a round requires a straight flush, the AI favors building a single suit: it avoids discarding that suit and is more likely to take suited discards that support the run.
 - Once AI has laid down, it only takes discard if the top card can be laid off immediately.
-- In multiplayer, AI may “buy” the discard (3+ players) if it would choose the discard on its next draw.
+- In multiplayer, AI only buys the discard (3+ players) when it completes a full laydown or can be laid off immediately after it has laid down.
 - AI avoids picking up a discard it just threw away unless it enables an immediate lay down.
 - AI avoids discarding a card it just picked from the discard pile unless forced.
 - Otherwise draws from the deck.

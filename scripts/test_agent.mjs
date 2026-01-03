@@ -1,8 +1,8 @@
 // Test agent that plays the game automatically using the real AI
 // Run with: node scripts/test_agent.mjs
 
-import { Game, JokerRank, formatRequirements, ROUNDS, canLayDownWithCards } from "../src/engine/gameEngine.js";
-import { aiTurn, chooseDrawSource } from "../src/engine/ai.js";
+import { Game, JokerRank, formatRequirements, ROUNDS, canLayDownWithCards, canLayDownWithCard } from "../src/engine/gameEngine.js";
+import { aiTurn } from "../src/engine/ai.js";
 
 function cardLabel(card) {
   if (!card) return "Empty";
@@ -40,7 +40,10 @@ function resolveBuy(game, discarderIndex) {
   const requests = [];
   for (let idx = 0; idx < game.players.length; idx += 1) {
     if (idx === discarderIndex || idx === nextIndex) continue;
-    if (chooseDrawSource(game, idx) === "discard") {
+    const player = game.players[idx];
+    const canLayDown = canLayDownWithCard(player.hand, top, game.currentRound().requirements);
+    const canLayOff = player.hasLaidDown && game.canLayOffCard(top);
+    if (canLayDown || canLayOff) {
       requests.push(idx);
     }
   }
@@ -137,4 +140,5 @@ function playGame(rounds = ROUNDS.length, players = 3) {
   console.log(`Final score: ${scores}`);
 }
 
-playGame();
+const players = Number(process.env.PLAYERS || 3);
+playGame(ROUNDS.length, players);

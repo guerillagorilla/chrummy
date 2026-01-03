@@ -3,7 +3,7 @@ import { createReadStream, promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
-import { Game, ROUNDS } from "../src/engine/gameEngine.js";
+import { Game, ROUNDS, canLayDownWithCard } from "../src/engine/gameEngine.js";
 import { aiTurn, chooseDrawSource } from "../src/engine/ai.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -247,8 +247,10 @@ function queueAiBuys(room) {
     if (!isAi) return;
     if (idx === game.currentPlayerIndex) return;
     if (room.buyState.requests.has(idx)) return;
-    const choice = chooseDrawSource(game, idx);
-    if (choice === "discard") {
+    const player = game.players[idx];
+    const canLayDown = canLayDownWithCard(player.hand, topDiscard, game.currentRound().requirements);
+    const canLayOff = player.hasLaidDown && game.canLayOffCard(topDiscard);
+    if (canLayDown || canLayOff) {
       room.buyState.requests.add(idx);
     }
   });
