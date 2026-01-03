@@ -552,6 +552,20 @@ wss.on("connection", (socket) => {
         sendError(socket, "Round is over.");
         return;
       }
+      if (msg.action === "restart") {
+        if (room.phase !== "game_over") {
+          sendError(socket, "Round is still active.");
+          return;
+        }
+        room.game.dealerIndex = (room.game.dealerIndex + 1) % room.game.players.length;
+        room.game.nextRound();
+        room.phase = "await_draw";
+        room.winnerIndex = null;
+        room.buyState = null;
+        broadcastState(room);
+        runAiTurns(room);
+        return;
+      }
       if (game.currentPlayerIndex !== playerIndex) {
         sendError(socket, "Not your turn.");
         return;
@@ -735,20 +749,6 @@ wss.on("connection", (socket) => {
         return;
       }
 
-      if (msg.action === "restart") {
-        if (room.phase !== "game_over") {
-          sendError(socket, "Round is still active.");
-          return;
-        }
-        room.game.dealerIndex = (room.game.dealerIndex + 1) % room.game.players.length;
-        room.game.nextRound();
-        room.phase = "await_draw";
-        room.winnerIndex = null;
-        room.buyState = null;
-        broadcastState(room);
-        runAiTurns(room);
-        return;
-      }
     }
   });
 
