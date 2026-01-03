@@ -705,17 +705,22 @@ export const JokerRank = JOKER;
  *           with wilds assigned to fill gaps.
  */
 export function getSortedMeldCards(meld) {
+  if (!meld || !Array.isArray(meld.cards)) return [];
+  if (!meld.type) {
+    return [...meld.cards];
+  }
+  const isWild = (card) => (card?.isWild ? card.isWild() : card?.rank === "2" || card?.rank === JOKER);
   if (meld.type === "set") {
     // Sets: naturals first, then wilds
-    const naturals = meld.cards.filter((c) => !c.isWild());
-    const wilds = meld.cards.filter((c) => c.isWild());
+    const naturals = meld.cards.filter((c) => !isWild(c));
+    const wilds = meld.cards.filter((c) => isWild(c));
     return [...naturals, ...wilds];
   }
 
   // Run: sort by effective position in the straight
   const cards = [...meld.cards];
-  const naturals = cards.filter((c) => !c.isWild());
-  const wilds = cards.filter((c) => c.isWild());
+  const naturals = cards.filter((c) => !isWild(c));
+  const wilds = cards.filter((c) => isWild(c));
 
   if (naturals.length === 0) {
     // All wilds - just return as-is
