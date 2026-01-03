@@ -8,6 +8,11 @@
   --shadow: rgba(0, 0, 0, 0.25);
   --card-radius: 8px;
   --gap: 10px;
+  --hand-card-width: 110px;
+  --hand-card-height: 140px;
+  --hand-card-gap: 8px;
+  --hand-row-height: 160px;
+  --center-row-height: 190px;
 }
 
 @font-face {
@@ -35,8 +40,8 @@ body {
 
 .table {
   height: 100vh;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto 1fr var(--center-row-height) 1fr;
   padding: 12px;
   gap: var(--gap);
 }
@@ -153,15 +158,25 @@ button.active {
   font-size: 12px;
 }
 
+.meld-area > h3 {
+  margin-bottom: 6px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+}
+
 /* Opponent row */
 .opponent-row {
   display: flex;
   gap: var(--gap);
-  flex-shrink: 0;
+  flex: 1 1 0;
+  min-height: 0;
+  align-items: stretch;
 }
 
 .opponent-row .panel.opponent {
   flex: 1;
+  height: 100%;
 }
 
 .opponent-row .log {
@@ -179,19 +194,30 @@ button.active {
 
 /* Center area */
 .center-area {
-  flex: 1;
   display: flex;
   gap: var(--gap);
+  align-items: stretch;
   min-height: 0;
+  height: 100%;
 }
 
 .piles-section {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 16px;
   padding: 10px;
+  height: 100%;
+}
+
+.melds-section-left,
+.melds-section-right {
+  flex: 1;
+}
+
+.melds-section-right .meld-area {
+  height: 100%;
 }
 
 .pile {
@@ -204,8 +230,8 @@ button.active {
 }
 
 .pile-card {
-  width: 95px;
-  height: 120px;
+  width: var(--hand-card-width);
+  height: var(--hand-card-height);
   border-radius: var(--card-radius);
   box-shadow: 0 4px 10px var(--shadow);
 }
@@ -233,12 +259,14 @@ button.active {
   display: flex;
   gap: var(--gap);
   min-width: 0;
+  height: 100%;
 }
 
 .meld-area {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .meld-header {
@@ -247,6 +275,7 @@ button.active {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 6px;
+  min-height: 28px;
 }
 
 .meld-actions {
@@ -280,6 +309,7 @@ button.active {
   border: 1px dashed rgba(255, 255, 255, 0.2);
   align-content: flex-start;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .meld {
@@ -347,13 +377,20 @@ button.active {
 
 /* Your hand row */
 .your-row {
-  flex-shrink: 0;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
 }
 
 .your-row .panel {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 12px;
+  flex: 1;
+  position: relative;
+  height: 100%;
 }
 
 .your-row h2 {
@@ -366,14 +403,20 @@ button.active {
   white-space: nowrap;
   display: flex;
   gap: 12px;
+  position: absolute;
+  top: 10px;
+  right: 12px;
 }
 
 .hand {
   display: flex;
-  gap: 6px;
-  overflow-x: auto;
+  gap: var(--hand-card-gap);
+  flex-wrap: wrap;
+  overflow: visible;
   flex: 1;
   position: relative;
+  align-content: flex-start;
+  height: calc(var(--hand-row-height) * 2 + var(--hand-card-gap));
 }
 
 .card {
@@ -400,11 +443,21 @@ button.active {
   text-align: center;
 }
 
+.hand .card {
+  width: var(--hand-card-width);
+  height: var(--hand-card-height);
+  font-size: 20px;
+}
+
+.hand .card .suit {
+  font-size: 40px;
+}
+
 .insert-marker {
   position: absolute;
   top: 0;
   width: 4px;
-  height: 120px;
+  height: var(--hand-card-height);
   background: var(--accent);
   border-radius: 2px;
   box-shadow: 0 0 10px rgba(216, 178, 90, 0.7);

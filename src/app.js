@@ -13,6 +13,7 @@ const yourHandEl = document.getElementById("your-hand");
 const opponentHandEl = document.getElementById("opponent-hand");
 const yourMeldsEl = document.getElementById("your-melds");
 const opponentMeldsEl = document.getElementById("opponent-melds");
+const opponentLogPanel = document.querySelector(".panel.log");
 const restartBtn = document.getElementById("restart-btn");
 const nextRoundBtn = document.getElementById("next-round-btn");
 const laydownSelectedBtn = document.getElementById("laydown-selected-btn");
@@ -408,6 +409,9 @@ function setSelectedHighlight(cardId) {
 
 function renderAll() {
   const view = getView();
+  if (opponentLogPanel) {
+    opponentLogPanel.classList.toggle("hidden", !devMode);
+  }
   const handToRender = autoSortEnabled ? sortHand(view.you.hand) : view.you.hand;
   renderHand(yourHandEl, handToRender, {
     faceUp: true,
