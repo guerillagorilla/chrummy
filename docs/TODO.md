@@ -64,58 +64,26 @@
 - Run several rounds and compare behavior against the rules (both player and opponent behaviors).
 - Verify scoring and AI match docs/rules.md.
 
-10. [ ] Optional later
+10. [ ] Multiplayer (Current Status)
 
-- Add WebSocket server for multiplayer
-- Add lobby / player names / turn animations
-- Add reconnects and error handling for multiplayer
-
----
-
-Multiplayer Outline (Draft)
-
-Status (WIP):
-
-- WebSocket server wired into `scripts/dev_server.mjs`.
-- Client can create/join rooms from the header controls.
-- State is authoritative on the server; client sends actions only.
-- Basic disconnect handling (room slot freed; rejoin allowed).
-
-1. WebSocket Server (Recommended)
-
-- Node.js server holds authoritative game state
-- Players connect via WebSocket, send actions (draw, discard, laydown, layoff)
-- Server validates moves and broadcasts updates
-- Each player only sees their hand + public info (melds, discard, opponent card count)
-
-```
-Client A                Server                Client B
-   |-- draw:deck -------->|                      |
-   |<-- state update -----|-- state update ----->|
-   |-- discard:card ----->|                      |
-   |<-- state update -----|-- state update ----->|
-```
-
-2. Room System
-
-- Generate room codes (e.g., "ABCD")
-- First player creates room, second joins with code
-- Could add matchmaking later
-
-3. Key Changes Needed:
-
-- Move `Game` class to server-side only
-- Client becomes a "view" that renders state and sends actions
-- Server sends filtered state (hide opponent's hand)
-- Handle disconnects/reconnects
-
-Simple MVP plan:
-
-1. Add `ws` package to Node server
-2. Create rooms with game instances
-3. Client connects, joins room, receives initial state
-4. Actions sent as JSON: `{type: "draw", source: "deck"}`
-5. Server validates, updates game, broadcasts new state
+- **MVP Plan**
+  - [x] Add `ws` package to Node server
+  - [x] Create rooms with game instances
+  - [x] Client connects, joins room, receives initial state
+  - [x] Actions sent as JSON: `{type: "draw", source: "deck"}`
+  - [x] Server validates, updates game, broadcasts new state
+- **Server & Client**
+  - [x] WebSocket server wired into `scripts/dev_server.mjs`
+  - [x] Server holds authoritative state; client sends actions only
+  - [x] Server validates moves and broadcasts updates
+  - [x] Filtered state per player (hide opponent hand)
+  - [x] Client create/join room controls in the header
+- **Room System**
+  - [x] Room codes (e.g., "ABCD") and join flow
+  - [x] Basic disconnect handling (room slot freed; rejoin allowed)
+  - [ ] Matchmaking
+- **Polish**
+  - [ ] Add lobby / player names / turn animations
 
 ---
 
