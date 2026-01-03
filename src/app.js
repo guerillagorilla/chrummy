@@ -969,15 +969,20 @@ function maybePlayMultiplayerSounds(prevState, nextState) {
 
   const prevPhase = prevState.phase;
   const nextPhase = nextState.phase;
+  const yourIndex = multiplayerPlayerIndex;
 
-  if (prevPhase === "await_draw" && nextPhase === "await_discard") {
+  if (
+    prevPhase === "await_draw" &&
+    nextPhase === "await_discard" &&
+    nextState.currentPlayerIndex !== yourIndex
+  ) {
     playSound("draw");
   }
 
   const prevDiscard = prevState.discardTop?.cid;
   const nextDiscard = nextState.discardTop?.cid;
   if (prevPhase === "await_discard" && (nextPhase === "await_draw" || nextPhase === "game_over")) {
-    if (prevDiscard !== nextDiscard) {
+    if (prevDiscard !== nextDiscard && prevState.currentPlayerIndex !== yourIndex) {
       playSound("discard");
     }
   }
@@ -986,9 +991,7 @@ function maybePlayMultiplayerSounds(prevState, nextState) {
   const nextOpponents = nextState.opponents ?? [];
   const prevOpponentCards = prevOpponents.reduce((sum, opponent) => sum + totalMeldCards(opponent.melds ?? []), 0);
   const nextOpponentCards = nextOpponents.reduce((sum, opponent) => sum + totalMeldCards(opponent.melds ?? []), 0);
-  const prevMeldCards = totalMeldCards(prevState.you.melds) + prevOpponentCards;
-  const nextMeldCards = totalMeldCards(nextState.you.melds) + nextOpponentCards;
-  if (nextMeldCards > prevMeldCards) {
+  if (nextOpponentCards > prevOpponentCards) {
     playSound("play");
   }
 }
