@@ -46,6 +46,7 @@ function createRoom(maxPlayers) {
     resumePhase: null,
     aiSeats: Array.from({ length: size }, () => false),
     buyState: null,
+    devMode: Array.from({ length: size }, () => false),
   };
   rooms.set(code, room);
   return room;
@@ -142,6 +143,7 @@ function stateForPlayer(room, playerIndex) {
   }
   const game = room.game;
   const you = game.players[playerIndex];
+  const showHands = room.devMode[playerIndex];
   const opponents = game.players
     .map((player, idx) => ({ player, idx }))
     .filter(({ idx }) => idx !== playerIndex)
@@ -149,6 +151,7 @@ function stateForPlayer(room, playerIndex) {
       playerIndex: idx,
       connected: room.aiSeats[idx] || room.sockets[idx]?.readyState === WebSocket.OPEN,
       isAi: room.aiSeats[idx],
+      hand: showHands ? player.hand.map(cardPayload) : null,
       handCount: player.hand.length,
       melds: player.melds.map(meldPayload),
       stagedMelds: player.stagedMelds.map(meldPayload),
@@ -418,6 +421,7 @@ wss.on("connection", (socket) => {
       }
       playerIndex = 0;
       room.sockets[playerIndex] = socket;
+      room.devMode[playerIndex] = false;
       room.lastActive = Date.now();
       updateRoomPhase(room);
       socket.send(JSON.stringify({ type: "room_created", room: room.code, playerIndex }));
@@ -442,6 +446,7 @@ wss.on("connection", (socket) => {
       room = target;
       playerIndex = slot;
       room.sockets[playerIndex] = socket;
+      room.devMode[playerIndex] = false;
       room.lastActive = Date.now();
       updateRoomPhase(room);
       socket.send(JSON.stringify({ type: "room_joined", room: room.code, playerIndex }));
@@ -474,6 +479,7 @@ wss.on("connection", (socket) => {
     if (msg.type === "leave_room") {
       if (room && playerIndex !== null) {
         room.sockets[playerIndex] = null;
+        room.devMode[playerIndex] = false;
         room.lastActive = Date.now();
         socket.send(JSON.stringify({ type: "room_left" }));
         updateRoomPhase(room);
@@ -513,6 +519,16 @@ wss.on("connection", (socket) => {
         return;
       }
       room.buyState.requests.add(playerIndex);
+      broadcastState(room);
+      return;
+    }
+
+    if (msg.type === "set_dev_mode") {
+      if (!room || playerIndex === null) {
+        sendError(socket, "Join a room first.");
+        return;
+      }
+      room.devMode[playerIndex] = Boolean(msg.enabled);
       broadcastState(room);
       return;
     }
@@ -740,6 +756,7 @@ wss.on("connection", (socket) => {
     if (!room || playerIndex === null) return;
     if (room.sockets[playerIndex] === socket) {
       room.sockets[playerIndex] = null;
+      room.devMode[playerIndex] = false;
       room.lastActive = Date.now();
       updateRoomPhase(room);
       broadcastState(room);

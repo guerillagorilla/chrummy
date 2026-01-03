@@ -515,7 +515,7 @@ function renderOpponentHands(view) {
     label.textContent = opponentLabel(opponent, view);
     const hand = document.createElement("div");
     hand.className = "hand opponent-hand";
-    if (view.mode === "local" && Array.isArray(opponent.hand)) {
+    if ((view.mode === "local" || devMode) && Array.isArray(opponent.hand)) {
       for (const card of opponent.hand) {
         const revealThis = devMode || card.cid === revealOpponentCardId;
         const cardEl = renderCard(card, {
@@ -857,6 +857,9 @@ nextRoundBtn.addEventListener("click", () => {
 
 devModeToggle.addEventListener("change", (event) => {
   devMode = event.target.checked;
+  if (multiplayerEnabled && socket && socket.readyState === WebSocket.OPEN) {
+    sendSocket({ type: "set_dev_mode", enabled: devMode });
+  }
   renderAll();
 });
 
