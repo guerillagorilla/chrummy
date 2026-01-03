@@ -303,8 +303,8 @@ button.active {
   flex: 1;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px;
+  gap: 16px;
+  padding: 10px;
   border-radius: 8px;
   border: 1px dashed rgba(255, 255, 255, 0.2);
   align-content: flex-start;
