@@ -452,12 +452,21 @@ function renderCard(card, options = {}) {
 function renderHand(container, hand, options = {}) {
   const { faceUp = true, selectable = false, selectedId = null } = options;
   container.innerHTML = "";
-  for (const card of hand) {
+  if (container === yourHandEl) {
+    const middle = hand.length > 0 ? (hand.length - 1) / 2 : 0;
+    container.style.setProperty("--hand-count", hand.length);
+    container.style.setProperty("--hand-middle", middle);
+  }
+  for (let i = 0; i < hand.length; i += 1) {
+    const card = hand[i];
     const cardEl = renderCard(card, {
       faceUp,
       selectable,
       selected: selectedId === card.cid,
     });
+    if (container === yourHandEl) {
+      cardEl.style.setProperty("--hand-index", i);
+    }
     container.appendChild(cardEl);
   }
   // Re-append insert marker for your hand (it gets cleared by innerHTML)
@@ -560,12 +569,26 @@ function renderOpponentHands(view) {
     label.textContent = opponentLabel(opponent, view);
     const hand = document.createElement("div");
     hand.className = "hand opponent-hand";
+    const isSinglePlayer = view.mode === "local" && opponents.length === 1;
+    if (isSinglePlayer) {
+      hand.classList.add("curved-hand", "curved-hand-top");
+    }
     if ((view.mode === "local" || devMode) && Array.isArray(opponent.hand)) {
-      for (const card of opponent.hand) {
+      const cardCount = opponent.hand.length;
+      const middle = cardCount > 0 ? (cardCount - 1) / 2 : 0;
+      if (isSinglePlayer) {
+        hand.style.setProperty("--hand-count", cardCount);
+        hand.style.setProperty("--hand-middle", middle);
+      }
+      for (let i = 0; i < cardCount; i++) {
+        const card = opponent.hand[i];
         const revealThis = devMode || card.cid === revealOpponentCardId;
         const cardEl = renderCard(card, {
           faceUp: revealThis,
         });
+        if (isSinglePlayer) {
+          cardEl.style.setProperty("--hand-index", i);
+        }
         if (!devMode && card.cid === revealOpponentCardId) {
           cardEl.classList.add("reveal");
         }
@@ -610,6 +633,9 @@ function renderOpponentMeldGroups(view) {
 
 function renderAll() {
   const view = getView();
+  const opponents = view.opponents ?? [];
+  const isSinglePlayer = view.mode === "local" && opponents.length === 1;
+  document.body.classList.toggle("single-player", isSinglePlayer);
   if (opponentLogPanel) {
     opponentLogPanel.classList.toggle("hidden", !devMode);
   }

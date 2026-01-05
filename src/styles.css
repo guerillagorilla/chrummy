@@ -12,6 +12,9 @@
   --hand-card-height: 140px;
   --hand-card-gap: 8px;
   --hand-row-height: 160px;
+  --hand-fan-gap: 26px;
+  --hand-fan-rotate: 3deg;
+  --hand-fan-curve: 1px;
   --center-row-height: 190px;
 }
 
@@ -198,24 +201,32 @@ button.active {
 .opponent-row .panel.opponent {
   flex: 1;
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .opponent-hands {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  position: relative;
 }
 
 .opponent-list {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+  flex: 1;
+  position: relative;
 }
 
 .opponent-stack {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1;
+  position: relative;
 }
 
 .opponent-stack.disconnected {
@@ -508,9 +519,41 @@ button.active {
   height: calc(var(--hand-row-height) * 2 + var(--hand-card-gap));
 }
 
+.hand.curved-hand {
+  display: block;
+  width: 100%;
+  height: var(--hand-row-height);
+}
+
+.your-row .hand.curved-hand {
+  flex: 0 0 var(--hand-row-height);
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
 .hand.opponent-hand {
   height: var(--hand-card-height);
   flex-wrap: nowrap;
+}
+
+/* Opponent curved hand (top of screen, inverted arc) */
+.hand.curved-hand.curved-hand-top {
+  height: 100%;
+  width: 100%;
+}
+
+.hand.curved-hand.curved-hand-top .card {
+  bottom: auto;
+  top: 50%;
+  transform:
+    translateX(calc(-50% + var(--hand-offset) * var(--hand-dynamic-gap)))
+    translateY(calc(-50% - var(--hand-arc) + var(--hand-selected-raise)))
+    rotate(calc(var(--hand-offset) * var(--hand-fan-rotate) * -1));
+}
+
+/* Single player mode - opponent panel takes remaining space */
+body.single-player .opponent-row .panel.opponent {
+  flex: 1;
 }
 
 .card {
@@ -545,6 +588,32 @@ button.active {
 
 .hand .card .suit {
   font-size: 40px;
+}
+
+.hand.curved-hand .card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform-origin: center center;
+  --hand-selected-raise: 0px;
+  --hand-offset: calc(var(--hand-index) - var(--hand-middle));
+  --hand-arc: calc(var(--hand-offset) * var(--hand-offset) * var(--hand-fan-curve));
+  /* Dynamic gap: use more spread with fewer cards, compress with more */
+  --hand-dynamic-gap: clamp(20px, calc(400px / var(--hand-count, 7)), 50px);
+  transform:
+    translateX(calc(-50% + var(--hand-offset) * var(--hand-dynamic-gap)))
+    translateY(calc(-50% + var(--hand-arc) + var(--hand-selected-raise)))
+    rotate(calc(var(--hand-offset) * var(--hand-fan-rotate)));
+  z-index: calc(var(--hand-index) + 1);
+}
+
+.hand.curved-hand .card:hover {
+  z-index: calc(var(--hand-count) + 1);
+}
+
+.hand.curved-hand .card.selected {
+  --hand-selected-raise: -12px;
+  z-index: calc(var(--hand-count) + 2);
 }
 
 .insert-marker {
