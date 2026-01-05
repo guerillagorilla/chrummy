@@ -91,6 +91,29 @@
           <div id="your-hand" class="hand curved-hand"></div>
           <div class="dev-tools">
             <label><input id="dev-mode" type="checkbox" /> Dev mode</label>
+            <button id="skip-round" type="button">Skip Round</button>
+            <div class="dev-sliders hidden">
+              <label>
+                Arc
+                <input id="fan-curve" type="range" min="0.4" max="8" step="0.1" />
+                <span id="fan-curve-value"></span>
+              </label>
+              <label>
+                Angle
+                <input id="fan-rotate" type="range" min="1" max="12" step="0.1" />
+                <span id="fan-rotate-value"></span>
+              </label>
+              <label>
+                Spread
+                <input id="fan-spread" type="range" min="280" max="800" step="10" />
+                <span id="fan-spread-value"></span>
+              </label>
+              <label>
+                Lift
+                <input id="fan-lift" type="range" min="-100" max="0" step="2" />
+                <span id="fan-lift-value"></span>
+              </label>
+            </div>
           </div>
         </section>
       </div>

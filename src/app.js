@@ -26,6 +26,16 @@ const addAiBtn = document.getElementById("add-ai");
 const leaveRoomBtn = document.getElementById("leave-room");
 const buyBtn = document.getElementById("buy-card");
 const roomSizeSelect = document.getElementById("room-size");
+const skipRoundBtn = document.getElementById("skip-round");
+const fanCurveInput = document.getElementById("fan-curve");
+const fanCurveValue = document.getElementById("fan-curve-value");
+const fanRotateInput = document.getElementById("fan-rotate");
+const fanRotateValue = document.getElementById("fan-rotate-value");
+const fanSpreadInput = document.getElementById("fan-spread");
+const fanSpreadValue = document.getElementById("fan-spread-value");
+const fanLiftInput = document.getElementById("fan-lift");
+const fanLiftValue = document.getElementById("fan-lift-value");
+const devSliders = document.querySelector(".dev-sliders");
 const yourRowEl = document.querySelector(".your-row");
 
 
@@ -52,6 +62,7 @@ let lastTapCardId = null;
 let lastPileTapTime = 0;
 let lastPileTapId = null;
 let buyPending = false;
+const handDebug = { lastOrder: "" };
 const soundFiles = {
   draw: "/public/assets/sounds/cockatrice/draw.wav",
   play: "/public/assets/sounds/cockatrice/playcard.wav",
@@ -386,30 +397,60 @@ function meldCanAdd(meld, card) {
   return cardIsWild(card) || meld.rank === card.rank;
 }
 
+function applyHandGap(container, count) {
+  const rootStyles = getComputedStyle(document.documentElement);
+  const spread = parseFloat(rootStyles.getPropertyValue("--hand-dynamic-spread")) || 520;
+  const gapMax = parseFloat(rootStyles.getPropertyValue("--hand-dynamic-gap-max")) || 70;
+  const spacingScale =
+    parseFloat(container.style.getPropertyValue("--hand-spacing-scale")) ||
+    parseFloat(rootStyles.getPropertyValue("--hand-spacing-scale")) ||
+    1;
+  const gap = Math.min(gapMax, Math.max(16, (spread / Math.max(1, count)) * spacingScale));
+  container.style.setProperty("--hand-dynamic-gap", `${gap}px`);
+}
+
+function applyHandLift(container) {
+  const rootStyles = getComputedStyle(document.documentElement);
+  const lift = parseFloat(rootStyles.getPropertyValue("--hand-lift")) || 0;
+  container.style.setProperty("--hand-lift", `${lift}px`);
+}
+
 function canFormRun(cards, requireHalfNatural) {
   const naturals = cards.filter((candidate) => !cardIsWild(candidate));
   if (requireHalfNatural && naturals.length < Math.ceil(cards.length / 2)) return false;
   let suit = null;
   const values = [];
+  let hasAce = false;
   for (const card of naturals) {
     if (suit && card.suit !== suit) return false;
     suit = card.suit;
     values.push(RANK_VALUES[card.rank]);
+    if (card.rank === "A") hasAce = true;
   }
   const unique = new Set(values);
   if (unique.size !== values.length) return false;
   if (naturals.length === 0) return !requireHalfNatural;
   const size = cards.length;
-  for (let start = 2; start <= 14 - size + 1; start += 1) {
-    const needed = new Set();
-    for (let offset = 0; offset < size; offset += 1) {
-      needed.add(start + offset);
+  const canFitRun = (runValues, allowAceLow) => {
+    const startMin = allowAceLow ? 1 : 2;
+    for (let start = startMin; start <= 14 - size + 1; start += 1) {
+      const needed = new Set();
+      for (let offset = 0; offset < size; offset += 1) {
+        needed.add(start + offset);
+      }
+      if (runValues.every((value) => needed.has(value))) {
+        return true;
+      }
     }
-    if (values.every((value) => needed.has(value))) {
-      return true;
-    }
-  }
-  return false;
+    return false;
+  };
+
+  if (canFitRun(values, false)) return true;
+  if (!hasAce) return false;
+  const lowValues = values.map((value) => (value === 14 ? 1 : value));
+  const lowSet = new Set(lowValues);
+  if (lowSet.size !== lowValues.length) return false;
+  return canFitRun(lowValues, true);
 }
 
 function renderCard(card, options = {}) {
@@ -456,6 +497,10 @@ function renderHand(container, hand, options = {}) {
     const middle = hand.length > 0 ? (hand.length - 1) / 2 : 0;
     container.style.setProperty("--hand-count", hand.length);
     container.style.setProperty("--hand-middle", middle);
+    const spacingScale = 1 + Math.min(0.4, Math.max(0, (hand.length - 7) * 0.03));
+    container.style.setProperty("--hand-spacing-scale", spacingScale.toFixed(2));
+    applyHandGap(container, hand.length);
+    applyHandLift(container);
   }
   for (let i = 0; i < hand.length; i += 1) {
     const card = hand[i];
@@ -468,6 +513,13 @@ function renderHand(container, hand, options = {}) {
       cardEl.style.setProperty("--hand-index", i);
     }
     container.appendChild(cardEl);
+  }
+  if (!multiplayerEnabled && container === yourHandEl) {
+    const order = hand.map((card) => card.cid).join(",");
+    if (order !== handDebug.lastOrder) {
+      console.log(`[hand] order=${order}`);
+      handDebug.lastOrder = order;
+    }
   }
   // Re-append insert marker for your hand (it gets cleared by innerHTML)
   if (container === yourHandEl && insertMarkerEl) {
@@ -561,6 +613,9 @@ function renderOpponentHands(view) {
   opponents.forEach((opponent) => {
     const stack = document.createElement("div");
     stack.className = "opponent-stack";
+    if (view.mode === "multiplayer" && view.currentPlayerIndex === opponent.playerIndex) {
+      stack.classList.add("current-turn");
+    }
     if (opponent.connected === false) {
       stack.classList.add("disconnected");
     }
@@ -576,10 +631,14 @@ function renderOpponentHands(view) {
     if ((view.mode === "local" || devMode) && Array.isArray(opponent.hand)) {
       const cardCount = opponent.hand.length;
       const middle = cardCount > 0 ? (cardCount - 1) / 2 : 0;
-      if (isSinglePlayer) {
-        hand.style.setProperty("--hand-count", cardCount);
-        hand.style.setProperty("--hand-middle", middle);
-      }
+    if (isSinglePlayer) {
+      hand.style.setProperty("--hand-count", cardCount);
+      hand.style.setProperty("--hand-middle", middle);
+      const spacingScale = 1 + Math.min(0.4, Math.max(0, (cardCount - 7) * 0.03));
+      hand.style.setProperty("--hand-spacing-scale", spacingScale.toFixed(2));
+      applyHandGap(hand, cardCount);
+      applyHandLift(hand);
+    }
       for (let i = 0; i < cardCount; i++) {
         const card = opponent.hand[i];
         const revealThis = devMode || card.cid === revealOpponentCardId;
@@ -926,8 +985,22 @@ nextRoundBtn.addEventListener("click", () => {
   advanceRound();
 });
 
+if (skipRoundBtn) {
+  skipRoundBtn.addEventListener("click", () => {
+    if (multiplayerEnabled) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      sendSocket({ type: "skip_round" });
+      return;
+    }
+    advanceRound();
+  });
+}
+
 devModeToggle.addEventListener("change", (event) => {
   devMode = event.target.checked;
+  if (devSliders) {
+    devSliders.classList.toggle("hidden", !devMode);
+  }
   if (multiplayerEnabled && socket && socket.readyState === WebSocket.OPEN) {
     sendSocket({ type: "set_dev_mode", enabled: devMode });
   }
@@ -978,6 +1051,64 @@ function updateTurnHighlight() {
       yourRowEl.classList.remove("your-turn");
     }
   }
+}
+
+function setupHandTuningControls() {
+  const root = document.documentElement;
+  if (!fanCurveInput || !fanRotateInput || !fanSpreadInput) return;
+
+  const styles = getComputedStyle(root);
+  const curve = parseFloat(styles.getPropertyValue("--hand-fan-curve")) || 1;
+  const rotate = parseFloat(styles.getPropertyValue("--hand-fan-rotate")) || 3;
+  const spread = parseFloat(styles.getPropertyValue("--hand-dynamic-spread")) || 520;
+  const lift = parseFloat(styles.getPropertyValue("--hand-lift")) || 0;
+
+  fanCurveInput.value = curve.toString();
+  fanRotateInput.value = rotate.toString();
+  fanSpreadInput.value = spread.toString();
+  if (fanLiftInput) fanLiftInput.value = lift.toString();
+  if (devSliders) {
+    devSliders.classList.toggle("hidden", !devMode);
+  }
+
+  const updateValue = () => {
+    if (fanCurveValue) fanCurveValue.textContent = fanCurveInput.value;
+    if (fanRotateValue) fanRotateValue.textContent = fanRotateInput.value;
+    if (fanSpreadValue) fanSpreadValue.textContent = fanSpreadInput.value;
+    if (fanLiftValue && fanLiftInput) fanLiftValue.textContent = fanLiftInput.value;
+  };
+
+  const apply = () => {
+    const curve = `${fanCurveInput.value}px`;
+    const rotate = `${fanRotateInput.value}deg`;
+    const spreadValue = Number.parseFloat(fanSpreadInput.value) || 520;
+    const spread = `${spreadValue}px`;
+    const gapMax = `${Math.min(140, Math.max(40, spreadValue / 5.5))}px`;
+    root.style.setProperty("--hand-fan-curve", curve);
+    root.style.setProperty("--hand-fan-rotate", rotate);
+    root.style.setProperty("--hand-dynamic-spread", spread);
+    root.style.setProperty("--hand-dynamic-gap-max", gapMax);
+    if (fanLiftInput) {
+      root.style.setProperty("--hand-lift", `${fanLiftInput.value}px`);
+    }
+    document.querySelectorAll(".hand.curved-hand").forEach((hand) => {
+      hand.style.setProperty("--hand-fan-curve", curve);
+      hand.style.setProperty("--hand-fan-rotate", rotate);
+      hand.style.setProperty("--hand-dynamic-spread", spread);
+      hand.style.setProperty("--hand-dynamic-gap-max", gapMax);
+      if (fanLiftInput) {
+        hand.style.setProperty("--hand-lift", `${fanLiftInput.value}px`);
+      }
+    });
+    updateValue();
+    renderAll();
+  };
+
+  fanCurveInput.addEventListener("input", apply);
+  fanRotateInput.addEventListener("input", apply);
+  fanSpreadInput.addEventListener("input", apply);
+  if (fanLiftInput) fanLiftInput.addEventListener("input", apply);
+  updateValue();
 }
 
 function updateRoundButtons(view) {
@@ -1515,6 +1646,17 @@ function enableDragAndDrop() {
       left = targetRect.left - containerRect.left + scrollLeft;
     }
     insertMarkerEl.style.left = `${left - 2}px`;
+    if (yourHandEl.classList.contains("curved-hand")) {
+      const computed = getComputedStyle(yourHandEl);
+      const rotateStr = computed.getPropertyValue("--hand-fan-rotate").trim();
+      const rotateDeg = Number.parseFloat(rotateStr) || 0;
+      const middle = cards.length > 0 ? (cards.length - 1) / 2 : 0;
+      const targetIndex = Math.min(index, cards.length - 1);
+      const angle = (targetIndex - middle) * rotateDeg;
+      insertMarkerEl.style.setProperty("--insert-marker-rotate", `${angle}deg`);
+    } else {
+      insertMarkerEl.style.setProperty("--insert-marker-rotate", "0deg");
+    }
     insertMarkerEl.classList.add("active");
   }
 
@@ -1556,6 +1698,9 @@ function enableDragAndDrop() {
     const fromIndex = hand.findIndex((card) => card.cid === cardId);
     if (fromIndex === -1 || toIndex === -1 || toIndex === undefined) return false;
     if (fromIndex === toIndex) return false;
+    if (!multiplayerEnabled) {
+      console.log(`[hand] move cid=${cardId} from=${fromIndex} to=${toIndex} count=${hand.length}`);
+    }
     const [moved] = hand.splice(fromIndex, 1);
     const adjustedToIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
     hand.splice(adjustedToIndex, 0, moved);
@@ -1830,6 +1975,7 @@ function enableDragAndDrop() {
 
 enableDragAndDrop();
 registerAudioUnlock();
+setupHandTuningControls();
 const initialRoom = new URLSearchParams(location.search).get("room");
 if (initialRoom) {
   roomCodeInput.value = initialRoom;

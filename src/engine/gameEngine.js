@@ -237,24 +237,37 @@ function canFormRun(cards, requireHalfNatural) {
   if (requireHalfNatural && naturals.length < Math.ceil(cards.length / 2)) return false;
   let suit = null;
   const naturalValues = [];
+  let hasAce = false;
   for (const card of naturals) {
     if (suit && card.suit !== suit) return false;
     suit = card.suit;
     naturalValues.push(RANK_VALUES[card.rank]);
+    if (card.rank === "A") hasAce = true;
   }
   const naturalSet = new Set(naturalValues);
   if (naturalSet.size !== naturalValues.length) return false;
   if (naturals.length === 0) return !requireHalfNatural;
   const size = cards.length;
-  for (let start = 2; start <= 14 - size + 1; start += 1) {
-    const needed = new Set();
-    for (let offset = 0; offset < size; offset += 1) {
-      needed.add(start + offset);
+  const canFitRun = (values, allowAceLow) => {
+    const startMin = allowAceLow ? 1 : 2;
+    for (let start = startMin; start <= 14 - size + 1; start += 1) {
+      const needed = new Set();
+      for (let offset = 0; offset < size; offset += 1) {
+        needed.add(start + offset);
+      }
+      if (values.every((value) => needed.has(value))) {
+        return true;
+      }
     }
-    const allInRange = naturalValues.every((value) => needed.has(value));
-    if (allInRange) return true;
-  }
-  return false;
+    return false;
+  };
+
+  if (canFitRun(naturalValues, false)) return true;
+  if (!hasAce) return false;
+  const lowValues = naturalValues.map((value) => (value === 14 ? 1 : value));
+  const lowSet = new Set(lowValues);
+  if (lowSet.size !== lowValues.length) return false;
+  return canFitRun(lowValues, true);
 }
 
 function makeMeld(requirement, cards) {

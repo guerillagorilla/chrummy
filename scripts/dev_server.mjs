@@ -71,6 +71,7 @@ function updateRoomPhase(room) {
   if (ready) {
     if (!room.game) {
       room.game = new Game(room.maxPlayers, 0);
+      room._logTurnOrder = true;
       room.phase = "await_draw";
       room.winnerIndex = null;
       room.resumePhase = null;
@@ -191,6 +192,10 @@ function stateForPlayer(room, playerIndex) {
 function broadcastState(room) {
   room.sockets.forEach((socket, idx) => {
     if (socket && socket.readyState === WebSocket.OPEN) {
+      if (room.game && room._logTurnOrder) {
+        console.log(`[room ${room.code}] round=${room.game.roundIndex + 1} dealer=${room.game.dealerIndex} current=${room.game.currentPlayerIndex}`);
+        room._logTurnOrder = false;
+      }
       socket.send(JSON.stringify(stateForPlayer(room, idx)));
     }
   });
@@ -542,6 +547,30 @@ wss.on("connection", (socket) => {
       return;
     }
 
+    if (msg.type === "skip_round") {
+      if (!room || playerIndex === null) {
+        sendError(socket, "Join a room first.");
+        return;
+      }
+      if (!room.devMode[playerIndex]) {
+        sendError(socket, "Enable dev mode to skip rounds.");
+        return;
+      }
+      if (!room.game) {
+        sendError(socket, "Game not ready.");
+        return;
+      }
+      room.game.dealerIndex = (room.game.dealerIndex + 1) % room.game.players.length;
+      room.game.nextRound();
+      room._logTurnOrder = true;
+      room.phase = "await_draw";
+      room.winnerIndex = null;
+      room.buyState = null;
+      broadcastState(room);
+      runAiTurns(room);
+      return;
+    }
+
     if (!room || playerIndex === null) {
       sendError(socket, "Join a room first.");
       return;
@@ -568,6 +597,7 @@ wss.on("connection", (socket) => {
         }
         room.game.dealerIndex = (room.game.dealerIndex + 1) % room.game.players.length;
         room.game.nextRound();
+        room._logTurnOrder = true;
         room.phase = "await_draw";
         room.winnerIndex = null;
         room.buyState = null;

@@ -15,6 +15,11 @@
   --hand-fan-gap: 26px;
   --hand-fan-rotate: 3deg;
   --hand-fan-curve: 1px;
+  --hand-center-shift: 0px;
+  --hand-dynamic-spread: 520px;
+  --hand-dynamic-gap-max: 70px;
+  --hand-spacing-scale: 1;
+  --hand-lift: 0px;
   --center-row-height: 190px;
 }
 
@@ -508,6 +513,33 @@ button.active {
   right: 12px;
 }
 
+.dev-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 12px;
+  flex-wrap: wrap;
+  max-width: 360px;
+}
+
+.dev-sliders label {
+  display: grid;
+  grid-template-columns: 48px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+}
+
+.dev-sliders input[type="range"] {
+  width: 160px;
+}
+
+.dev-sliders span {
+  min-width: 38px;
+  text-align: right;
+  opacity: 0.8;
+}
+
 .hand {
   display: flex;
   gap: var(--hand-card-gap);
@@ -546,7 +578,7 @@ button.active {
   bottom: auto;
   top: 50%;
   transform:
-    translateX(calc(-50% + var(--hand-offset) * var(--hand-dynamic-gap)))
+    translateX(calc(-50% + var(--hand-center-shift) + var(--hand-offset) * var(--hand-gap)))
     translateY(calc(-50% - var(--hand-arc) + var(--hand-selected-raise)))
     rotate(calc(var(--hand-offset) * var(--hand-fan-rotate) * -1));
 }
@@ -599,10 +631,17 @@ body.single-player .opponent-row .panel.opponent {
   --hand-offset: calc(var(--hand-index) - var(--hand-middle));
   --hand-arc: calc(var(--hand-offset) * var(--hand-offset) * var(--hand-fan-curve));
   /* Dynamic gap: use more spread with fewer cards, compress with more */
-  --hand-dynamic-gap: clamp(20px, calc(400px / var(--hand-count, 7)), 50px);
+  --hand-gap: var(
+    --hand-dynamic-gap,
+    clamp(
+      16px,
+      calc((var(--hand-dynamic-spread) / var(--hand-count, 7)) * var(--hand-spacing-scale)),
+      var(--hand-dynamic-gap-max)
+    )
+  );
   transform:
-    translateX(calc(-50% + var(--hand-offset) * var(--hand-dynamic-gap)))
-    translateY(calc(-50% + var(--hand-arc) + var(--hand-selected-raise)))
+    translateX(calc(-50% + var(--hand-center-shift) + var(--hand-offset) * var(--hand-gap)))
+    translateY(calc(-50% + var(--hand-arc) + var(--hand-selected-raise) + var(--hand-lift)))
     rotate(calc(var(--hand-offset) * var(--hand-fan-rotate)));
   z-index: calc(var(--hand-index) + 1);
 }

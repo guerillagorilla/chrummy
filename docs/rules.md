@@ -27,6 +27,7 @@
 
 - Required melds change by round (see Rounds & Meld Requirements).
 - A valid set is X-of-a-kind (rank matches), and a valid run is a straight flush (same suit, consecutive ranks).
+- Ace can be low or high in runs (A-2-3-4 or 10-J-Q-K-A). Runs cannot wrap (K-A-2-3 is invalid).
 - Round requirements are minimums: a required 3-of-a-kind can be 4+ cards, and a required 4-card straight flush can be 5+ cards, as long as it stays a straight flush.
 - Each required meld must be at least 50% natural (non-wild).
   - Example valid: 7♣ 7♥ 2♠ (2 is wild).
@@ -73,6 +74,7 @@ Rounds progress in order from 1 through 7.
 - Before laying down, take the discard only if it is wild or immediately enables the full round laydown.
 - If the AI has gone several turns without progress, it favors drawing from the deck unless the discard immediately completes the round.
 - When a round requires a straight flush, the AI favors building a single suit: it avoids discarding that suit and is more likely to take suited discards that support the run.
+- AI run evaluation treats Ace as low or high with no wrap-around.
 - Once AI has laid down, it only takes discard if the top card can be laid off immediately.
 - In multiplayer, AI only buys the discard (3+ players) when it completes a full laydown or can be laid off immediately after it has laid down.
 - AI avoids picking up a discard it just threw away unless it enables an immediate lay down.
