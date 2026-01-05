@@ -241,7 +241,7 @@ button.active {
   margin: 0;
   padding-left: 16px;
   font-size: 12px;
-  max-height: 160px;
+  max-height: 260px;
   overflow-y: auto;
 }
 
@@ -488,7 +488,7 @@ button.active {
 }
 
 .dev-tools {
-  font-size: 12px;
+  font-size: 14px;
   white-space: nowrap;
   display: flex;
   gap: 12px;
