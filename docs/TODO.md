@@ -129,7 +129,7 @@ High Impact
 
 Medium Impact
 
-- [ ] Sort hand toggle (auto-sort by rank/suit).
+- [x] Sort hand toggle (auto-sort by rank/suit).
 - [ ] Undo button (allow undoing moves before discarding).
 - [ ] Toast notifications for events (replace or supplement message bar).
 - [ ] Improve opponent hand count badges (more visible).
