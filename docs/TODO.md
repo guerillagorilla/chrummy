@@ -104,9 +104,9 @@
 
 ---
 
-Suggestions Backlog
+## Suggestions Backlog
 
-Code Architecture
+### Code Architecture
 
 - [ ] Split `src/app.js` into modules:
   - `src/render.js` for rendering functions (`renderCard`, `renderHand`, `renderMelds`, etc.)
@@ -118,7 +118,7 @@ Code Architecture
   - `const gameState = { mode: "local", phase: "await_draw", selectedCardId: null /* ... */ };`
 - [ ] Extract magic numbers into a constants file (example: `DOUBLE_TAP_DELAY`, `AI_TURN_DELAY`, `REVEAL_DURATION`).
 
-GUI Improvements
+### GUI Improvements
 
 High Impact
 
@@ -142,11 +142,13 @@ Polish
 - [ ] Sound toggle in UI (mute/unmute).
 - [ ] Dragging visual (shadow/scale while dragging).
 
-Accessibility
+### Accessibility
 
 - [ ] Keyboard navigation (tab through cards, enter to select/play).
 - [ ] ARIA labels for cards, buttons, and interactive elements.
 - [ ] Color blind mode (pattern fills for suits).
+
+---
 
 Suggested Web Layout
 
