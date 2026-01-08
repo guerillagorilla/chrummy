@@ -626,7 +626,7 @@ button.active {
 
 .confetti-piece {
   position: absolute;
-  top: -10vh;
+  bottom: -12vh;
   left: var(--x);
   width: var(--w);
   height: var(--h);
@@ -634,15 +634,23 @@ button.active {
   opacity: 0.9;
   transform: rotate(var(--rotate));
   border-radius: 2px;
-  animation: confetti-fall var(--duration) linear var(--delay) forwards;
+  animation: confetti-launch var(--duration) cubic-bezier(0.18, 0.7, 0.2, 1) var(--delay) forwards;
 }
 
-@keyframes confetti-fall {
+@keyframes confetti-launch {
   0% {
     transform: translateY(0) rotate(var(--rotate));
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  60% {
+    transform: translate(var(--drift-mid), var(--rise)) rotate(calc(var(--rotate) + 160deg));
   }
   100% {
-    transform: translateY(110vh) rotate(calc(var(--rotate) + 240deg));
+    transform: translate(var(--drift-end), var(--fall)) rotate(calc(var(--rotate) + 320deg));
+    opacity: 0;
   }
 }
 
