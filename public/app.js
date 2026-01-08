@@ -1891,7 +1891,7 @@ function enableDragAndDrop() {
       const targetId = Number(targetEl.dataset.cardId);
       if (targetId === cardId) return;
       if (lastDropTargetId === targetId) return;
-      toIndex = getYourHand().findIndex((card) => card.cid === targetId);
+      toIndex = cards.findIndex((cardEl) => Number(cardEl.dataset.cardId) === targetId);
       lastDropTargetId = targetId;
     } else {
       toIndex = computeInsertIndex(cards, event.clientX);
