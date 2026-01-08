@@ -1480,7 +1480,13 @@ if (sortHandBtn) {
     autoSortEnabled = !autoSortEnabled;
     if (wasEnabled && !autoSortEnabled) {
       const view = getView();
-      manualHandOrder = sortHand(view.you.hand).map((card) => card.cid);
+      const sortedHand = sortHand(view.you.hand);
+      manualHandOrder = sortedHand.map((card) => card.cid);
+      if (!multiplayerState) {
+        const hand = getYourHand();
+        hand.length = 0;
+        hand.push(...sortedHand);
+      }
     }
     renderAll();
   });
