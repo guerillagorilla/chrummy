@@ -366,18 +366,34 @@ function writeHead(res, status, headers = {}) {
   res.writeHead(status, { ...SECURITY_HEADERS, ...headers });
 }
 
-function resolveRequestPath(requestedPath) {
-  const relativePath = requestedPath.replace(/^\/+/, "");
-  return path.resolve(ROOT, relativePath);
+function sanitizeRelativePath(urlPath) {
+  const relativePath = urlPath.replace(/^\/+/, "");
+  if (relativePath.includes("..")) return null;
+  return relativePath;
 }
 
-function isAllowedPath(filePath) {
-  return (
-    filePath === PUBLIC_ROOT ||
-    filePath.startsWith(`${PUBLIC_ROOT}${path.sep}`) ||
-    filePath === SRC_ROOT ||
-    filePath.startsWith(`${SRC_ROOT}${path.sep}`)
-  );
+function candidatePathsForUrl(cleanUrl) {
+  if (cleanUrl === "/") {
+    return [path.join(PUBLIC_ROOT, "index.html")];
+  }
+  if (cleanUrl === "/app.js") {
+    return [path.join(PUBLIC_ROOT, "app.js"), path.join(SRC_ROOT, "app.js")];
+  }
+  if (cleanUrl === "/styles.css") {
+    return [path.join(PUBLIC_ROOT, "styles.css"), path.join(SRC_ROOT, "styles.css")];
+  }
+  const relativePath = sanitizeRelativePath(cleanUrl);
+  if (!relativePath) return null;
+  if (cleanUrl.startsWith("/engine/")) {
+    return [
+      path.join(PUBLIC_ROOT, relativePath),
+      path.join(SRC_ROOT, relativePath),
+    ];
+  }
+  if (cleanUrl.startsWith("/assets/")) {
+    return [path.join(PUBLIC_ROOT, relativePath)];
+  }
+  return [path.join(PUBLIC_ROOT, relativePath)];
 }
 
 const server = http.createServer(async (req, res) => {
@@ -405,25 +421,35 @@ const server = http.createServer(async (req, res) => {
   }
 
   const cleanUrl = req.url.split("?")[0];
-  const requestedPath = cleanUrl === "/" ? "/public/index.html" : cleanUrl;
-  const filePath = resolveRequestPath(requestedPath);
-  if (!isAllowedPath(filePath)) {
+  const candidates = candidatePathsForUrl(cleanUrl);
+  if (!candidates) {
     writeHead(res, 403);
     res.end("Forbidden");
     return;
   }
 
   try {
-    const stat = await fs.stat(filePath);
-    if (stat.isDirectory()) {
-      writeHead(res, 403);
-      res.end("Forbidden");
+    let foundPath = null;
+    for (const candidate of candidates) {
+      try {
+        const stat = await fs.stat(candidate);
+        if (!stat.isDirectory()) {
+          foundPath = candidate;
+          break;
+        }
+      } catch {
+        // try next candidate
+      }
+    }
+    if (!foundPath) {
+      writeHead(res, 404);
+      res.end("Not found");
       return;
     }
-    const ext = path.extname(filePath).toLowerCase();
+    const ext = path.extname(foundPath).toLowerCase();
     const contentType = mimeTypes[ext] || "application/octet-stream";
     writeHead(res, 200, { "Content-Type": contentType });
-    createReadStream(filePath).pipe(res);
+    createReadStream(foundPath).pipe(res);
   } catch {
     writeHead(res, 404);
     res.end("Not found");
@@ -831,5 +857,5 @@ wss.on("connection", (socket) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Serving /public and /src on http://0.0.0.0:${PORT}`);
+  console.log(`Serving /public with dev fallbacks on http://0.0.0.0:${PORT}`);
 });

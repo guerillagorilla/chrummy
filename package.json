@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/dev_server.mjs"
+    "dev": "node scripts/dev_server.mjs",
+    "build": "node scripts/build.mjs"
   },
   "dependencies": {
     "ws": "^8.18.3"
