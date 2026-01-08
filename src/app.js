@@ -64,10 +64,10 @@ let lastPileTapId = null;
 let buyPending = false;
 const handDebug = { lastOrder: "" };
 const soundFiles = {
-  draw: "/public/assets/sounds/cockatrice/draw.wav",
-  play: "/public/assets/sounds/cockatrice/playcard.wav",
-  discard: "/public/assets/sounds/cockatrice/tap.wav",
-  ding: "/public/assets/sounds/cockatrice/stagechangeoldnotification.wav",
+  draw: "/assets/sounds/cockatrice/draw.wav",
+  play: "/assets/sounds/cockatrice/playcard.wav",
+  discard: "/assets/sounds/cockatrice/tap.wav",
+  ding: "/assets/sounds/cockatrice/stagechangeoldnotification.wav",
 };
 const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
 let audioContext = null;
