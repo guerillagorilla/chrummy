@@ -627,14 +627,14 @@ button.active {
 .confetti-piece {
   position: absolute;
   top: -10vh;
-  left: calc(var(--x) * 1%);
-  width: calc(var(--size) * 1px);
-  height: calc(var(--size) * 0.6px);
+  left: var(--x);
+  width: var(--w);
+  height: var(--h);
   background: var(--color);
   opacity: 0.9;
   transform: rotate(var(--rotate));
   border-radius: 2px;
-  animation: confetti-fall var(--duration)ms linear var(--delay)ms forwards;
+  animation: confetti-fall var(--duration) linear var(--delay) forwards;
 }
 
 @keyframes confetti-fall {

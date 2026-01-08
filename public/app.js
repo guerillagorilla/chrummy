@@ -140,11 +140,14 @@ function startWinCelebration() {
   for (let i = 0; i < 60; i += 1) {
     const piece = document.createElement("span");
     piece.className = "confetti-piece";
-    piece.style.setProperty("--x", Math.random() * 100);
-    piece.style.setProperty("--delay", Math.floor(Math.random() * 400));
-    piece.style.setProperty("--duration", 2200 + Math.floor(Math.random() * 1200));
+    const x = Math.random() * 100;
+    const size = 6 + Math.floor(Math.random() * 8);
+    piece.style.setProperty("--x", `${x}%`);
+    piece.style.setProperty("--w", `${size}px`);
+    piece.style.setProperty("--h", `${Math.max(4, Math.floor(size * 0.6))}px`);
+    piece.style.setProperty("--delay", `${Math.floor(Math.random() * 400)}ms`);
+    piece.style.setProperty("--duration", `${2200 + Math.floor(Math.random() * 1200)}ms`);
     piece.style.setProperty("--rotate", `${Math.floor(Math.random() * 360)}deg`);
-    piece.style.setProperty("--size", 6 + Math.floor(Math.random() * 8));
     piece.style.setProperty("--color", CONFETTI_COLORS[i % CONFETTI_COLORS.length]);
     winCelebrationEl.appendChild(piece);
   }
