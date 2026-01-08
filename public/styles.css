@@ -512,9 +512,30 @@ button.active {
   height: 100%;
 }
 
+.hand-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .your-row h2 {
   margin: 0;
   white-space: nowrap;
+}
+
+#sort-hand {
+  padding: 4px 10px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--paper);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: none;
+}
+
+#sort-hand.active {
+  background: var(--accent);
+  color: var(--ink);
+  border-color: transparent;
 }
 
 .dev-tools {

@@ -25,6 +25,7 @@ const joinRoomBtn = document.getElementById("join-room");
 const addAiBtn = document.getElementById("add-ai");
 const leaveRoomBtn = document.getElementById("leave-room");
 const buyBtn = document.getElementById("buy-card");
+const sortHandBtn = document.getElementById("sort-hand");
 const roomSizeSelect = document.getElementById("room-size");
 const skipRoundBtn = document.getElementById("skip-round");
 const fanCurveInput = document.getElementById("fan-curve");
@@ -722,6 +723,7 @@ function renderAll() {
   renderMelds(yourMeldsEl, view.you, ownerIndex);
   renderOpponentMeldGroups(view);
   renderPiles(view);
+  updateSortToggle();
   updateScore();
   updateRoundButtons(view);
   updateLaydownControls(view);
@@ -1051,6 +1053,13 @@ function updateMessageFromState() {
   } else {
     setMessage(`${playerLabel(multiplayerState.currentPlayerIndex, multiplayerState)}'s turn.`, "waiting");
   }
+}
+
+function updateSortToggle() {
+  if (!sortHandBtn) return;
+  sortHandBtn.classList.toggle("active", autoSortEnabled);
+  sortHandBtn.setAttribute("aria-pressed", autoSortEnabled ? "true" : "false");
+  sortHandBtn.textContent = autoSortEnabled ? "Auto Sort: On" : "Auto Sort";
 }
 
 function updateTurnHighlight() {
@@ -1462,6 +1471,16 @@ if (buyBtn) {
     updateBuyControls(multiplayerState);
     setMessage("Buy requested.");
     sendSocket({ type: "buy" });
+  });
+}
+
+if (sortHandBtn) {
+  sortHandBtn.addEventListener("click", () => {
+    autoSortEnabled = !autoSortEnabled;
+    if (!autoSortEnabled && multiplayerState) {
+      manualHandOrder = getYourHand().map((card) => card.cid);
+    }
+    renderAll();
   });
 }
 
