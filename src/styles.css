@@ -309,10 +309,24 @@ button.active {
   background: #1f3b6e;
   color: #fff;
   border: 2px solid #222;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   font-weight: bold;
   font-size: 14px;
+}
+
+.deck-label {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.deck-count {
+  font-size: 11px;
+  font-weight: normal;
+  opacity: 0.75;
 }
 
 .pile-card .card {
@@ -748,9 +762,20 @@ body.single-player .opponent-row .panel.opponent {
 }
 
 /* Turn indicator */
+@keyframes turn-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--accent), 0 0 20px rgba(216, 178, 90, 0.4); }
+  50% { box-shadow: 0 0 0 5px var(--accent), 0 0 35px rgba(216, 178, 90, 0.6); }
+}
+
+@keyframes message-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
 .your-row.your-turn {
   box-shadow: 0 0 0 3px var(--accent), 0 0 20px rgba(216, 178, 90, 0.4);
   border-radius: 14px;
+  animation: turn-pulse 2s ease-in-out infinite;
 }
 
 .your-row.your-turn .panel {
@@ -761,6 +786,7 @@ body.single-player .opponent-row .panel.opponent {
   background: var(--accent);
   color: var(--ink);
   font-weight: 600;
+  animation: message-pulse 1.5s ease-in-out infinite;
 }
 
 .message.waiting {

@@ -577,6 +577,18 @@ function renderMelds(container, playerView, ownerIndex, { clear = true } = {}) {
 }
 
 function renderPiles(view) {
+  // Update draw pile count
+  const drawCountEl = document.getElementById("draw-count");
+  if (drawCountEl) {
+    if (view.drawCount == null) {
+      drawCountEl.textContent = "";
+    } else {
+      const count = view.drawCount;
+      drawCountEl.textContent = count === 1 ? "1 card" : `${count} cards`;
+    }
+  }
+
+  // Update discard pile
   discardCardEl.innerHTML = "";
   discardCardEl.classList.add("back");
   const topDiscard = view.discardTop;
@@ -714,6 +726,7 @@ function renderAll() {
   updateRoundButtons(view);
   updateLaydownControls(view);
   updateBuyControls(view);
+  updateTurnHighlight();
 }
 
 function resetSelections() {
@@ -1042,9 +1055,9 @@ function updateMessageFromState() {
 
 function updateTurnHighlight() {
   if (yourRowEl) {
-    const showHighlight = multiplayerEnabled && 
-      multiplayerReady() && 
-      isPlayerTurn();
+    const showHighlight = multiplayerEnabled 
+      ? (multiplayerReady() && isPlayerTurn())
+      : (state === "await_draw" || state === "await_discard");
     if (showHighlight) {
       yourRowEl.classList.add("your-turn");
     } else {

@@ -99,10 +99,54 @@
   - [x] Server: build multi-deck shoe based on room size
   - [x] Server: enforce turn order and per-player state for N players
   - [x] Client: render multiple opponent hands and meld areas
-  - [x] Client: show current player turn + count of opponents
-  - [x] Update rules/docs to reflect multiplayer limits and deck scaling
+- [x] Client: show current player turn + count of opponents
+- [x] Update rules/docs to reflect multiplayer limits and deck scaling
 
 ---
+
+Suggestions Backlog
+
+Code Architecture
+
+- [ ] Split `src/app.js` into modules:
+  - `src/render.js` for rendering functions (`renderCard`, `renderHand`, `renderMelds`, etc.)
+  - `src/multiplayer.js` for WebSocket handling and room management
+  - `src/dragdrop.js` for drag-and-drop and touch handlers
+  - `src/audio.js` for sound loading/playback
+  - `src/state.js` for centralized state management (replace scattered globals)
+- [ ] Introduce a single state object (example):
+  - `const gameState = { mode: "local", phase: "await_draw", selectedCardId: null /* ... */ };`
+- [ ] Extract magic numbers into a constants file (example: `DOUBLE_TAP_DELAY`, `AI_TURN_DELAY`, `REVEAL_DURATION`).
+
+GUI Improvements
+
+High Impact
+
+- [x] Draw pile card count (show remaining cards under the deck).
+- [ ] Card animations for draw, discard, and meld transitions.
+- [x] More prominent turn indicator (pulsing message and stronger glow).
+- [ ] Mobile layout improvements: stacked melds, smaller cards, collapsible opponent area, bottom-fixed scrollable hand.
+
+Medium Impact
+
+- [ ] Sort hand toggle (auto-sort by rank/suit).
+- [ ] Undo button (allow undoing moves before discarding).
+- [ ] Toast notifications for events (replace or supplement message bar).
+- [ ] Improve opponent hand count badges (more visible).
+- [ ] Rules reminder tooltip or button for round requirements.
+
+Polish
+
+- [ ] Card flip animation when opponent draws a wild from deck.
+- [ ] Victory celebration (confetti or win animation).
+- [ ] Sound toggle in UI (mute/unmute).
+- [ ] Dragging visual (shadow/scale while dragging).
+
+Accessibility
+
+- [ ] Keyboard navigation (tab through cards, enter to select/play).
+- [ ] ARIA labels for cards, buttons, and interactive elements.
+- [ ] Color blind mode (pattern fills for suits).
 
 Suggested Web Layout
 
