@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev_server.mjs",
-    "build": "node scripts/build.mjs"
+    "build": "node scripts/build.mjs",
+    "prod": "npm run build && NODE_ENV=production node scripts/dev_server.mjs"
   },
   "dependencies": {
     "ws": "^8.18.3"

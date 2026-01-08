@@ -16,6 +16,7 @@ const POLL_INTERVAL = 500;
 const ROOM_CODE_LENGTH = 4;
 const ROOM_IDLE_MS = 1000 * 60 * 5;
 const AI_TURN_DELAY_MS = 3000;
+const IS_PROD = process.env.NODE_ENV === "production";
 
 let version = 0;
 const rooms = new Map();
@@ -372,23 +373,33 @@ function sanitizeRelativePath(urlPath) {
   return relativePath;
 }
 
+function isSrcAsset(filePath) {
+  if (filePath === path.join(SRC_ROOT, "app.js")) return true;
+  if (filePath === path.join(SRC_ROOT, "styles.css")) return true;
+  return filePath.startsWith(`${SRC_ROOT}${path.sep}engine${path.sep}`);
+}
+
 function candidatePathsForUrl(cleanUrl) {
+  const allowSrcFallback = !IS_PROD;
   if (cleanUrl === "/") {
     return [path.join(PUBLIC_ROOT, "index.html")];
   }
   if (cleanUrl === "/app.js") {
-    return [path.join(PUBLIC_ROOT, "app.js"), path.join(SRC_ROOT, "app.js")];
+    return allowSrcFallback
+      ? [path.join(SRC_ROOT, "app.js"), path.join(PUBLIC_ROOT, "app.js")]
+      : [path.join(PUBLIC_ROOT, "app.js")];
   }
   if (cleanUrl === "/styles.css") {
-    return [path.join(PUBLIC_ROOT, "styles.css"), path.join(SRC_ROOT, "styles.css")];
+    return allowSrcFallback
+      ? [path.join(SRC_ROOT, "styles.css"), path.join(PUBLIC_ROOT, "styles.css")]
+      : [path.join(PUBLIC_ROOT, "styles.css")];
   }
   const relativePath = sanitizeRelativePath(cleanUrl);
   if (!relativePath) return null;
   if (cleanUrl.startsWith("/engine/")) {
-    return [
-      path.join(PUBLIC_ROOT, relativePath),
-      path.join(SRC_ROOT, relativePath),
-    ];
+    return allowSrcFallback
+      ? [path.join(SRC_ROOT, relativePath), path.join(PUBLIC_ROOT, relativePath)]
+      : [path.join(PUBLIC_ROOT, relativePath)];
   }
   if (cleanUrl.startsWith("/assets/")) {
     return [path.join(PUBLIC_ROOT, relativePath)];
@@ -404,6 +415,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.url === "/events") {
+    if (IS_PROD) {
+      writeHead(res, 404);
+      res.end("Not found");
+      return;
+    }
     writeHead(res, 200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -445,6 +461,9 @@ const server = http.createServer(async (req, res) => {
       writeHead(res, 404);
       res.end("Not found");
       return;
+    }
+    if (!IS_PROD && isSrcAsset(foundPath)) {
+      res.setHeader("X-Source", "src");
     }
     const ext = path.extname(foundPath).toLowerCase();
     const contentType = mimeTypes[ext] || "application/octet-stream";
@@ -857,5 +876,9 @@ wss.on("connection", (socket) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Serving /public with dev fallbacks on http://0.0.0.0:${PORT}`);
+  const label = IS_PROD ? "/public only" : "/public with dev fallbacks";
+  console.log(`Serving ${label} on http://0.0.0.0:${PORT}`);
+  if (!IS_PROD) {
+    console.log("Dev mode: prefers /src assets over /public build output.");
+  }
 });
