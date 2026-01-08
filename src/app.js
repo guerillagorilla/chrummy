@@ -597,7 +597,7 @@ function renderHand(container, hand, options = {}) {
     }
     container.appendChild(cardEl);
   }
-  if (!multiplayerEnabled && container === yourHandEl) {
+  if (!multiplayerEnabled && devMode && container === yourHandEl) {
     const order = hand.map((card) => card.cid).join(",");
     if (order !== handDebug.lastOrder) {
       console.log(`[hand] order=${order}`);
