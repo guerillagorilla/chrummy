@@ -85,15 +85,15 @@
 - **Polish**
   - [ ] Add lobby / player names / turn animations
 - **Buying Cards (3+ players only)**
-  - [ ] Add "Buy" button visible when it's not your turn
-  - [ ] When a card is discarded, non-current players can click Buy to claim it
-  - [ ] Cost: buyer receives the discard + draws 1 extra card from draw pile (2 cards total)
-  - [ ] Priority: if multiple players want to buy, player closest to discarder (clockwise) wins
-  - [ ] Current player doesn't need to buy - they take discard normally on their turn
-  - [ ] Only one card can be bought at a time (per discard)
-  - [ ] No limit on total buys per round
-  - [ ] Play "ding" sound when a buy is successful
-  - [ ] Hide/disable buying in 2-player games (pointless since next turn is always yours)
+  - [x] Add "Buy" button visible when it's not your turn
+  - [x] When a card is discarded, non-current players can click Buy to claim it
+  - [x] Cost: buyer receives the discard + draws 1 extra card from draw pile (2 cards total)
+  - [x] Priority: if multiple players want to buy, player closest to discarder (clockwise) wins
+  - [x] Current player doesn't need to buy - they take discard normally on their turn
+  - [x] Only one card can be bought at a time (per discard)
+  - [x] No limit on total buys per round
+  - [x] Play "ding" sound when a buy is successful
+  - [x] Hide/disable buying in 2-player games (pointless since next turn is always yours)
 - **More Players (Deck Scaling)**
   - [x] Support room sizes up to 10 players (see README deck scaling rules)
   - [x] Server: build multi-deck shoe based on room size
