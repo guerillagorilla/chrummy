@@ -9,6 +9,8 @@ import { aiTurn, chooseDrawSource } from "../src/engine/ai.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, "..");
+const PUBLIC_ROOT = path.join(ROOT, "public");
+const SRC_ROOT = path.join(ROOT, "src");
 const PORT = Number(process.env.PORT || 8000);
 const POLL_INTERVAL = 500;
 const ROOM_CODE_LENGTH = 4;
@@ -354,15 +356,39 @@ const mimeTypes = {
   ".ttf": "font/ttf",
 };
 
+const SECURITY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "no-referrer",
+};
+
+function writeHead(res, status, headers = {}) {
+  res.writeHead(status, { ...SECURITY_HEADERS, ...headers });
+}
+
+function resolveRequestPath(requestedPath) {
+  const relativePath = requestedPath.replace(/^\/+/, "");
+  return path.resolve(ROOT, relativePath);
+}
+
+function isAllowedPath(filePath) {
+  return (
+    filePath === PUBLIC_ROOT ||
+    filePath.startsWith(`${PUBLIC_ROOT}${path.sep}`) ||
+    filePath === SRC_ROOT ||
+    filePath.startsWith(`${SRC_ROOT}${path.sep}`)
+  );
+}
+
 const server = http.createServer(async (req, res) => {
   if (!req.url) {
-    res.writeHead(400);
+    writeHead(res, 400);
     res.end();
     return;
   }
 
   if (req.url === "/events") {
-    res.writeHead(200, {
+    writeHead(res, 200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
@@ -380,9 +406,9 @@ const server = http.createServer(async (req, res) => {
 
   const cleanUrl = req.url.split("?")[0];
   const requestedPath = cleanUrl === "/" ? "/public/index.html" : cleanUrl;
-  const filePath = path.join(ROOT, requestedPath);
-  if (!filePath.startsWith(ROOT)) {
-    res.writeHead(403);
+  const filePath = resolveRequestPath(requestedPath);
+  if (!isAllowedPath(filePath)) {
+    writeHead(res, 403);
     res.end("Forbidden");
     return;
   }
@@ -390,16 +416,16 @@ const server = http.createServer(async (req, res) => {
   try {
     const stat = await fs.stat(filePath);
     if (stat.isDirectory()) {
-      res.writeHead(403);
+      writeHead(res, 403);
       res.end("Forbidden");
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
     const contentType = mimeTypes[ext] || "application/octet-stream";
-    res.writeHead(200, { "Content-Type": contentType });
+    writeHead(res, 200, { "Content-Type": contentType });
     createReadStream(filePath).pipe(res);
   } catch {
-    res.writeHead(404);
+    writeHead(res, 404);
     res.end("Not found");
   }
 });
@@ -804,6 +830,6 @@ wss.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Serving ${ROOT} on http://localhost:${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Serving /public and /src on http://0.0.0.0:${PORT}`);
 });
