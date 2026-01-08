@@ -1476,9 +1476,11 @@ if (buyBtn) {
 
 if (sortHandBtn) {
   sortHandBtn.addEventListener("click", () => {
+    const wasEnabled = autoSortEnabled;
     autoSortEnabled = !autoSortEnabled;
-    if (!autoSortEnabled && multiplayerState) {
-      manualHandOrder = getYourHand().map((card) => card.cid);
+    if (wasEnabled && !autoSortEnabled) {
+      const view = getView();
+      manualHandOrder = sortHand(view.you.hand).map((card) => card.cid);
     }
     renderAll();
   });
