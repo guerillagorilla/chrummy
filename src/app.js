@@ -28,6 +28,7 @@ const buyBtn = document.getElementById("buy-card");
 const sortHandBtn = document.getElementById("sort-hand");
 const roomSizeSelect = document.getElementById("room-size");
 const skipRoundBtn = document.getElementById("skip-round");
+const winCelebrationEl = document.getElementById("win-celebration");
 const fanCurveInput = document.getElementById("fan-curve");
 const fanCurveValue = document.getElementById("fan-curve-value");
 const fanRotateInput = document.getElementById("fan-rotate");
@@ -50,6 +51,9 @@ let multiplayerPlayerIndex = null;
 let socket = null;
 let multiplayerEnabled = false;
 let autoSortEnabled = false;
+let lastWinner = null;
+let lastCelebrationKey = null;
+let winCelebrationTimer = null;
 
 let draggingCardId = null;
 let lastDropTargetId = null;
@@ -96,6 +100,16 @@ const SUIT_ORDER = {
   clubs: 3,
   joker: 4,
 };
+const CONFETTI_COLORS = [
+  "#f6d365",
+  "#fda085",
+  "#7afcff",
+  "#feff9c",
+  "#ff9a8b",
+  "#9bf6ff",
+  "#c4fcef",
+  "#ffcf56",
+];
 
 function setMessage(text, state = "normal") {
   messageEl.textContent = text;
@@ -104,6 +118,64 @@ function setMessage(text, state = "normal") {
     messageEl.classList.add("your-turn");
   } else if (state === "waiting") {
     messageEl.classList.add("waiting");
+  }
+}
+
+function stopWinCelebration() {
+  if (!winCelebrationEl) return;
+  if (winCelebrationTimer) {
+    clearTimeout(winCelebrationTimer);
+    winCelebrationTimer = null;
+  }
+  winCelebrationEl.classList.remove("active");
+  winCelebrationEl.innerHTML = "";
+}
+
+function startWinCelebration() {
+  if (!winCelebrationEl) return;
+  winCelebrationEl.innerHTML = "";
+  const burst = document.createElement("div");
+  burst.className = "celebration-burst";
+  winCelebrationEl.appendChild(burst);
+  for (let i = 0; i < 60; i += 1) {
+    const piece = document.createElement("span");
+    piece.className = "confetti-piece";
+    piece.style.setProperty("--x", Math.random() * 100);
+    piece.style.setProperty("--delay", Math.floor(Math.random() * 400));
+    piece.style.setProperty("--duration", 2200 + Math.floor(Math.random() * 1200));
+    piece.style.setProperty("--rotate", `${Math.floor(Math.random() * 360)}deg`);
+    piece.style.setProperty("--size", 6 + Math.floor(Math.random() * 8));
+    piece.style.setProperty("--color", CONFETTI_COLORS[i % CONFETTI_COLORS.length]);
+    winCelebrationEl.appendChild(piece);
+  }
+  winCelebrationEl.classList.add("active");
+  if (winCelebrationTimer) clearTimeout(winCelebrationTimer);
+  winCelebrationTimer = setTimeout(() => {
+    stopWinCelebration();
+  }, 3600);
+}
+
+function updateWinCelebration() {
+  let shouldCelebrate = false;
+  let celebrationKey = null;
+  if (multiplayerState) {
+    if (multiplayerState.phase === "game_over" && multiplayerState.winnerIndex === multiplayerPlayerIndex) {
+      shouldCelebrate = true;
+      celebrationKey = `mp-${multiplayerState.winnerIndex}-${multiplayerState.round ?? ""}-${multiplayerState.you?.totalScore ?? ""}`;
+    }
+  } else if (state === "game_over" && lastWinner === 0) {
+    shouldCelebrate = true;
+    celebrationKey = `local-${game.roundIndex}-${game.players[0].totalScore}`;
+  }
+
+  if (shouldCelebrate && celebrationKey && celebrationKey !== lastCelebrationKey) {
+    lastCelebrationKey = celebrationKey;
+    startWinCelebration();
+    return;
+  }
+  if (!shouldCelebrate) {
+    lastCelebrationKey = null;
+    stopWinCelebration();
   }
 }
 
@@ -729,6 +801,7 @@ function renderAll() {
   updateLaydownControls(view);
   updateBuyControls(view);
   updateTurnHighlight();
+  updateWinCelebration();
 }
 
 function resetSelections() {
@@ -742,6 +815,8 @@ function startRound() {
   game.roundIndex = 0;
   game.startRound();
   state = "await_draw";
+  lastWinner = null;
+  stopWinCelebration();
   resetSelections();
   revealOpponentCardId = null;
   if (revealTimer) {
@@ -757,6 +832,8 @@ function advanceRound() {
   if (multiplayerEnabled) return;
   game.nextRound();
   state = "await_draw";
+  lastWinner = null;
+  stopWinCelebration();
   resetSelections();
   revealOpponentCardId = null;
   if (revealTimer) {
@@ -844,6 +921,7 @@ function handlePlayerDiscard(card) {
   if (game.checkWin(game.players[0])) {
     game.applyRoundScores(0);
     setMessage("You win! Press Next Round to continue or Restart to reset.");
+    lastWinner = 0;
     state = "game_over";
     renderAll();
     return;
@@ -884,6 +962,7 @@ function runAiTurn() {
   if (game.checkWin(game.players[1])) {
     game.applyRoundScores(1);
     setMessage("Opponent wins. Press Next Round to continue or Restart to reset.");
+    lastWinner = 1;
     state = "game_over";
   } else {
     state = "await_draw";
@@ -907,6 +986,7 @@ function runPlayerAiTurn() {
   if (game.checkWin(game.players[0])) {
     game.applyRoundScores(0);
     setMessage("You win! Press Next Round to continue or Restart to reset.");
+    lastWinner = 0;
     state = "game_over";
     renderAll();
     return;
@@ -1420,6 +1500,8 @@ function leaveRoomCleanup() {
   multiplayerRoom = null;
   multiplayerPlayerIndex = null;
   manualHandOrder = [];
+  lastWinner = null;
+  stopWinCelebration();
   roomCodeInput.value = "";
   showRoomControls(false);
   const url = new URL(location.href);
@@ -1584,6 +1666,7 @@ function handleLayoff(cardId, meldEl) {
     if (game.checkWin(game.players[0])) {
       game.applyRoundScores(0);
       setMessage("You win! Press Next Round to continue or Restart to reset.");
+      lastWinner = 0;
       state = "game_over";
       renderAll();
     }

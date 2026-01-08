@@ -603,6 +603,55 @@ button.active {
   flex-wrap: nowrap;
 }
 
+/* Win celebration */
+.win-celebration {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  display: none;
+  z-index: 50;
+}
+
+.win-celebration.active {
+  display: block;
+}
+
+.celebration-burst {
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(circle at 50% 20%, rgba(250, 230, 160, 0.4), rgba(250, 230, 160, 0) 55%);
+  animation: burst-fade 2.6s ease-out forwards;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -10vh;
+  left: calc(var(--x) * 1%);
+  width: calc(var(--size) * 1px);
+  height: calc(var(--size) * 0.6px);
+  background: var(--color);
+  opacity: 0.9;
+  transform: rotate(var(--rotate));
+  border-radius: 2px;
+  animation: confetti-fall var(--duration)ms linear var(--delay)ms forwards;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotate(var(--rotate));
+  }
+  100% {
+    transform: translateY(110vh) rotate(calc(var(--rotate) + 240deg));
+  }
+}
+
+@keyframes burst-fade {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* Opponent curved hand (top of screen, inverted arc) */
 .hand.curved-hand.curved-hand-top {
   height: 100%;
