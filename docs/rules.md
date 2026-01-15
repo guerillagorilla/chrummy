@@ -29,8 +29,9 @@
 - A valid set is X-of-a-kind (rank matches), and a valid run is a straight flush (same suit, consecutive ranks).
 - Ace can be low or high in runs (A-2-3-4 or 10-J-Q-K-A). Runs cannot wrap (K-A-2-3 is invalid).
 - Round requirements are minimums: a required 3-of-a-kind can be 4+ cards, and a required 4-card straight flush can be 5+ cards, as long as it stays a straight flush.
-- Each required meld must be at least 50% natural (non-wild).
+- Each required meld must be at least 50% natural (non-wild), unless the meld is an all-wild set.
   - Example valid: 7♣ 7♥ 2♠ (2 is wild).
+  - Example valid (all-wild set): 2♥ 2♠ 🃏.
   - Example invalid: 7♣ 2♥ 🃏 (two wilds in a 3-card meld).
 
 ## Lay Offs

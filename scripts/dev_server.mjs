@@ -322,8 +322,10 @@ async function walkFiles(dir, files = []) {
   return files;
 }
 
-async function snapshotMtime(root) {
-  const files = await walkFiles(root);
+async function snapshotMtime(roots) {
+  const rootList = Array.isArray(roots) ? roots : [roots];
+  const fileLists = await Promise.all(rootList.map((root) => walkFiles(root)));
+  const files = fileLists.flat();
   let newest = 0;
   for (const file of files) {
     if (file.endsWith(".pyc")) continue;
@@ -337,13 +339,41 @@ async function snapshotMtime(root) {
   return newest;
 }
 
+async function snapshotMtimeDetails(roots) {
+  const rootList = Array.isArray(roots) ? roots : [roots];
+  const fileLists = await Promise.all(rootList.map((root) => walkFiles(root)));
+  const files = fileLists.flat();
+  let newest = 0;
+  let newestFile = null;
+  for (const file of files) {
+    if (file.endsWith(".pyc")) continue;
+    try {
+      const stat = await fs.stat(file);
+      if (stat.mtimeMs > newest) {
+        newest = stat.mtimeMs;
+        newestFile = file;
+      }
+    } catch {
+      // ignore transient file errors
+    }
+  }
+  return { newest, newestFile };
+}
+
 async function watchFiles() {
-  let lastMtime = await snapshotMtime(ROOT);
+  const watchRoots = [PUBLIC_ROOT, SRC_ROOT];
+  let lastMtime = await snapshotMtime(watchRoots);
   setInterval(async () => {
-    const current = await snapshotMtime(ROOT);
+    const current = await snapshotMtime(watchRoots);
     if (current > lastMtime) {
       lastMtime = current;
       version += 1;
+      if (process.env.WATCH_DEBUG) {
+        const details = await snapshotMtimeDetails(watchRoots);
+        if (details.newestFile) {
+          console.log(`[watch] change in ${details.newestFile}`);
+        }
+      }
     }
   }, POLL_INTERVAL);
 }
@@ -425,7 +455,7 @@ const server = http.createServer(async (req, res) => {
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
     });
-    let lastSeen = -1;
+    let lastSeen = version;
     const interval = setInterval(() => {
       if (version !== lastSeen) {
         lastSeen = version;
