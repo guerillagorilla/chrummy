@@ -1015,6 +1015,18 @@ body.variant-player-grid .your-row {
 }
 
 @media (max-width: 980px) {
+  body.variant-player-grid {
+    --hand-card-width: 110px;
+    --hand-card-height: 150px;
+    --hand-row-height: 170px;
+    --center-row-height: 200px;
+  }
+
+  body.variant-player-grid .pile-card {
+    width: 110px;
+    height: 150px;
+  }
+
   body.variant-player-grid .table {
     grid-template-areas:
       "topbar"
@@ -1032,5 +1044,19 @@ body.variant-player-grid .your-row {
 
   body.variant-player-grid .center-area {
     flex-direction: column;
+  }
+}
+
+@media (max-width: 700px) {
+  body.variant-player-grid {
+    --hand-card-width: 92px;
+    --hand-card-height: 128px;
+    --hand-row-height: 145px;
+    --center-row-height: 180px;
+  }
+
+  body.variant-player-grid .pile-card {
+    width: 100px;
+    height: 136px;
   }
 }
