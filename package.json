@@ -8,6 +8,6 @@
     "prod": "npm run build && NODE_ENV=production node scripts/dev_server.mjs"
   },
   "dependencies": {
-    "ws": "^8.18.3"
+    "ws": "^8.19.0"
   }
 }

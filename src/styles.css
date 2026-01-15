@@ -897,3 +897,166 @@ body.single-player .opponent-row .panel.opponent {
   background: var(--danger);
   color: #fff;
 }
+
+body.variant-player-grid {
+  --gap: 12px;
+  --center-row-height: 230px;
+  --hand-row-height: 210px;
+  --hand-card-width: 140px;
+  --hand-card-height: 190px;
+  --hand-fan-gap: 30px;
+  --hand-fan-rotate: 4deg;
+  --hand-fan-curve: 1.4px;
+  --hand-dynamic-spread: 620px;
+  --card-radius: 14px;
+}
+
+body.variant-player-grid .card {
+  width: 112px;
+  height: 156px;
+  font-size: 20px;
+  background: linear-gradient(145deg, #fff6e6, #efe2c9 60%);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+}
+
+body.variant-player-grid .card .suit {
+  font-size: 42px;
+}
+
+body.variant-player-grid .hand .card {
+  width: var(--hand-card-width);
+  height: var(--hand-card-height);
+  font-size: 22px;
+}
+
+body.variant-player-grid .hand .card .suit {
+  font-size: 46px;
+}
+
+body.variant-player-grid .pile-card {
+  width: 130px;
+  height: 180px;
+}
+
+body.variant-player-grid .meld {
+  height: 130px;
+  min-width: 180px;
+}
+
+body.variant-player-grid .meld .card {
+  width: 70px;
+  height: 102px;
+  font-size: 13px;
+}
+
+body.variant-player-grid .table {
+  display: grid;
+  grid-template-areas:
+    "topbar topbar"
+    "opponents center"
+    "you you";
+  grid-template-columns: 1fr 1.2fr;
+  grid-template-rows: auto 1fr 1fr;
+  padding: 14px;
+  gap: 12px;
+}
+
+body.variant-player-grid .topbar {
+  grid-area: topbar;
+}
+
+body.variant-player-grid .opponent-row {
+  grid-area: opponents;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 10px;
+  min-height: 0;
+}
+
+body.variant-player-grid .opponent-row .panel.opponent {
+  min-height: 0;
+}
+
+body.variant-player-grid .opponent-hands {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  overflow-y: auto;
+}
+
+body.variant-player-grid .opponent-stack {
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(5, 20, 14, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.variant-player-grid .opponent-hand {
+  height: 120px;
+}
+
+body.variant-player-grid .panel.log {
+  width: 100%;
+  max-height: 180px;
+}
+
+body.variant-player-grid .center-area {
+  grid-area: center;
+}
+
+body.variant-player-grid .piles-section {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+body.variant-player-grid .your-row {
+  grid-area: you;
+}
+
+@media (max-width: 980px) {
+  body.variant-player-grid {
+    --hand-card-width: 110px;
+    --hand-card-height: 150px;
+    --hand-row-height: 170px;
+    --center-row-height: 200px;
+  }
+
+  body.variant-player-grid .pile-card {
+    width: 110px;
+    height: 150px;
+  }
+
+  body.variant-player-grid .table {
+    grid-template-areas:
+      "topbar"
+      "opponents"
+      "center"
+      "you";
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto 1fr;
+    overflow-y: auto;
+  }
+
+  body.variant-player-grid .opponent-hands {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+
+  body.variant-player-grid .center-area {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 700px) {
+  body.variant-player-grid {
+    --hand-card-width: 92px;
+    --hand-card-height: 128px;
+    --hand-row-height: 145px;
+    --center-row-height: 180px;
+  }
+
+  body.variant-player-grid .pile-card {
+    width: 100px;
+    height: 136px;
+  }
+}
