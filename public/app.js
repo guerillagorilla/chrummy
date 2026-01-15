@@ -5,6 +5,7 @@ import { aiTurn } from "./engine/ai.js";
 const messageEl = document.getElementById("message");
 const scoreEl = document.getElementById("score");
 const subtitleEl = document.getElementById("subtitle");
+const subtitleTextEl = document.getElementById("subtitle-text");
 const opponentLogEl = document.getElementById("opponent-log");
 const drawPileEl = document.getElementById("draw-pile");
 const discardPileEl = document.getElementById("discard-pile");
@@ -399,6 +400,7 @@ function updateScore() {
   const roundData = view.round ?? ROUNDS[roundIndex];
   const roundSummary = roundData ? formatRequirements(roundData.requirements) : "";
   const roundLabel = roundSummary ? `Round ${roundIndex + 1}/${roundTotal}: ${roundSummary}` : `Round ${roundIndex + 1}/${roundTotal}`;
+  const subtitleText = roundSummary ? `Round ${roundIndex + 1}: ${roundSummary}` : `Round ${roundIndex + 1}`;
   const opponents = view.opponents ?? [];
   let opponentsLabel = "Opponents: 0";
   if (opponents.length === 1 && view.mode === "local") {
@@ -409,8 +411,23 @@ function updateScore() {
   }
   scoreEl.textContent = `${roundLabel} | You: ${view.you.totalScore} | ${opponentsLabel}`;
   if (subtitleEl) {
-    subtitleEl.textContent = roundSummary ? `Round ${roundIndex + 1}: ${roundSummary}` : `Round ${roundIndex + 1}`;
+    if (subtitleTextEl) {
+      subtitleTextEl.textContent = subtitleText;
+      requestAnimationFrame(() => {
+        const shouldScroll = subtitleTextEl.scrollWidth > subtitleEl.clientWidth;
+        const forceScroll = subtitleText.length > 18;
+        subtitleEl.classList.toggle("subtitle--scrolling", shouldScroll || forceScroll);
+        subtitleTextEl.style.setProperty(
+          "--subtitle-scroll-duration",
+          `${Math.max(8, Math.ceil(subtitleTextEl.scrollWidth / 35))}s`
+        );
+      });
+      subtitleEl.title = subtitleText;
+    } else {
+      subtitleEl.textContent = subtitleText;
+    }
   }
+  document.title = `Chinese Rummy - ${subtitleText}`;
 }
 
 function logOpponent(text) {

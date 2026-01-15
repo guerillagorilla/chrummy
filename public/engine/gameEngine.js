@@ -246,7 +246,7 @@ function canFormRun(cards, requireHalfNatural) {
   }
   const naturalSet = new Set(naturalValues);
   if (naturalSet.size !== naturalValues.length) return false;
-  if (naturals.length === 0) return !requireHalfNatural;
+  if (naturals.length === 0) return true;
   const size = cards.length;
   const canFitRun = (values, allowAceLow) => {
     const startMin = allowAceLow ? 1 : 2;

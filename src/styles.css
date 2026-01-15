@@ -75,6 +75,27 @@ h1 {
   margin: 2px 0 0;
   font-size: 12px;
   opacity: 0.8;
+  max-width: min(320px, 55vw);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.subtitle-text {
+  display: inline-block;
+  padding-right: 24px;
+}
+
+.subtitle--scrolling .subtitle-text {
+  animation: subtitle-scroll var(--subtitle-scroll-duration, 10s) linear infinite;
+}
+
+@keyframes subtitle-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
 }
 
 .status {
