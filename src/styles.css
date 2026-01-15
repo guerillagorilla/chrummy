@@ -900,10 +900,53 @@ body.single-player .opponent-row .panel.opponent {
 
 body.variant-player-grid {
   --gap: 12px;
-  --center-row-height: 200px;
-  --hand-row-height: 170px;
-  --hand-card-width: 110px;
-  --hand-card-height: 145px;
+  --center-row-height: 230px;
+  --hand-row-height: 210px;
+  --hand-card-width: 140px;
+  --hand-card-height: 190px;
+  --hand-fan-gap: 30px;
+  --hand-fan-rotate: 4deg;
+  --hand-fan-curve: 1.4px;
+  --hand-dynamic-spread: 620px;
+  --card-radius: 14px;
+}
+
+body.variant-player-grid .card {
+  width: 112px;
+  height: 156px;
+  font-size: 20px;
+  background: linear-gradient(145deg, #fff6e6, #efe2c9 60%);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+}
+
+body.variant-player-grid .card .suit {
+  font-size: 42px;
+}
+
+body.variant-player-grid .hand .card {
+  width: var(--hand-card-width);
+  height: var(--hand-card-height);
+  font-size: 22px;
+}
+
+body.variant-player-grid .hand .card .suit {
+  font-size: 46px;
+}
+
+body.variant-player-grid .pile-card {
+  width: 130px;
+  height: 180px;
+}
+
+body.variant-player-grid .meld {
+  height: 130px;
+  min-width: 180px;
+}
+
+body.variant-player-grid .meld .card {
+  width: 70px;
+  height: 102px;
+  font-size: 13px;
 }
 
 body.variant-player-grid .table {
