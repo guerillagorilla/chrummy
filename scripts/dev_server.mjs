@@ -594,6 +594,45 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.url === "/api/rules") {
+    writeHead(res, 200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      game: "Chinese Rummy",
+      rounds: ROUNDS.map((r, i) => ({
+        round: i + 1,
+        hand_size: r.handSize,
+        requirements: formatRequirements(r.requirements),
+        requirements_detail: r.requirements
+      })),
+      card_notation: {
+        suits: { H: "hearts", D: "diamonds", C: "clubs", S: "spades" },
+        ranks: ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"],
+        wild: ["2", "JK"],
+        joker: "JK"
+      },
+      melds: {
+        set: "3+ cards of same rank (e.g., 7H 7S 7D)",
+        run: "4+ consecutive cards of same suit (e.g., 4H 5H 6H 7H)"
+      },
+      turn_sequence: [
+        "1. Draw from deck OR discard pile",
+        "2. (Optional) Lay down melds if you meet round requirements",
+        "3. (Optional) Lay off cards to existing melds (if you've laid down)",
+        "4. Discard one card"
+      ],
+      scoring: {
+        "3-10": "face value",
+        "J,Q,K": 10,
+        "A": 15,
+        "2": 20,
+        "JK": 50
+      },
+      wild_cards: "2s and Jokers can substitute for any card in a meld",
+      winning: "Empty your hand by melding all cards and discarding last card"
+    }, null, 2));
+    return;
+  }
+
   if (req.url === "/events") {
     if (IS_PROD) {
       writeHead(res, 404);
