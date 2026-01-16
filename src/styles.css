@@ -1201,6 +1201,11 @@ body.variant-player-grid .pile-card {
   height: var(--hand-card-height);
 }
 
+body.variant-player-grid .pile-card .card {
+  width: 100%;
+  height: 100%;
+}
+
 body.variant-player-grid .meld {
   height: 130px;
   min-width: 180px;
