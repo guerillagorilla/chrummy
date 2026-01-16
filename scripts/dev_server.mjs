@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { Game, ROUNDS, canLayDownWithCard } from "../src/engine/gameEngine.js";
 import { aiTurn, chooseDrawSource } from "../src/engine/ai.js";
+import { createBotApiServer } from "./bot_api.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -508,7 +509,23 @@ const server = http.createServer(async (req, res) => {
 watchFiles();
 setInterval(cleanupRooms, 30000);
 
-const wss = new WebSocketServer({ server, path: "/ws" });
+// Both WebSocket servers use noServer mode with centralized upgrade handling
+const botWss = createBotApiServer(server, "/api/bot");
+const wss = new WebSocketServer({ noServer: true });
+
+// Centralized upgrade handler
+server.on("upgrade", (request, socket, head) => {
+  const url = new URL(request.url, `http://${request.headers.host}`);
+  
+  if (url.pathname === "/ws") {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit("connection", ws, request);
+    });
+  } else if (url.pathname !== "/api/bot") {
+    // Bot API handles its own path, destroy unknown paths
+    socket.destroy();
+  }
+});
 
 wss.on("connection", (socket) => {
   let room = null;
@@ -908,6 +925,7 @@ wss.on("connection", (socket) => {
 server.listen(PORT, "0.0.0.0", () => {
   const label = IS_PROD ? "/public only" : "/public with dev fallbacks";
   console.log(`Serving ${label} on http://0.0.0.0:${PORT}`);
+  console.log(`Bot API available at ws://localhost:${PORT}/api/bot`);
   if (!IS_PROD) {
     console.log("Dev mode: prefers /src assets over /public build output.");
   }
