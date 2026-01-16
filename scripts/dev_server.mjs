@@ -3,9 +3,9 @@ import { createReadStream, promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
-import { Game, ROUNDS, canLayDownWithCard } from "../src/engine/gameEngine.js";
+import { Game, ROUNDS, canLayDownWithCard, formatRequirements } from "../src/engine/gameEngine.js";
 import { aiTurn, chooseDrawSource } from "../src/engine/ai.js";
-import { createBotApiServer } from "./bot_api.mjs";
+import { createBotApiServer, llamaConnections, sendToLlama, isLlamaConnected, setLlamaActionHandler } from "./bot_api.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,8 +49,9 @@ function createRoom(maxPlayers) {
     lastActive: Date.now(),
     maxPlayers: size,
     resumePhase: null,
-    aiSeats: Array.from({ length: size }, () => false),
+    aiSeats: Array.from({ length: size }, () => null),  // null | "builtin" | "llama"
     buyState: null,
+    llamaSocket: null,  // WebSocket connection to Llama service
     devMode: Array.from({ length: size }, () => false),
     aiTimer: null,
   };
@@ -157,7 +158,8 @@ function stateForPlayer(room, playerIndex) {
     .map(({ player, idx }) => ({
       playerIndex: idx,
       connected: room.aiSeats[idx] || room.sockets[idx]?.readyState === WebSocket.OPEN,
-      isAi: room.aiSeats[idx],
+      isAi: Boolean(room.aiSeats[idx]),
+      aiType: room.aiSeats[idx] || null,
       hand: showHands ? player.hand.map(cardPayload) : null,
       handCount: player.hand.length,
       melds: player.melds.map(meldPayload),
@@ -270,24 +272,171 @@ function scheduleAiTurn(room) {
   if (room.aiTimer) return;
   if (room.phase !== "await_draw") return;
   const current = room.game.currentPlayerIndex;
-  if (!room.aiSeats[current]) return;
+  const aiType = room.aiSeats[current];
+  if (!aiType) return;
+  
+  if (aiType === "llama") {
+    // Llama AI - send state to connected Llama service
+    scheduleLlamaTurn(room, current);
+  } else {
+    // Built-in AI
+    room.aiTimer = setTimeout(() => {
+      room.aiTimer = null;
+      if (!room.game || room.phase !== "await_draw") return;
+      const aiIndex = room.game.currentPlayerIndex;
+      if (!room.aiSeats[aiIndex]) return;
+      aiTurn(room.game, aiIndex);
+      finishAiTurn(room, aiIndex);
+    }, AI_TURN_DELAY_MS);
+  }
+}
+
+function finishAiTurn(room, aiIndex) {
+  if (room.game.checkWin(room.game.players[aiIndex])) {
+    room.game.applyRoundScores(aiIndex);
+    room.phase = "game_over";
+    room.winnerIndex = aiIndex;
+  } else {
+    room.phase = "await_draw";
+    room.game.currentPlayerIndex = (aiIndex + 1) % room.game.players.length;
+  }
+  broadcastState(room);
+  scheduleAiTurn(room);
+}
+
+// Llama AI turn handling
+const LLAMA_TIMEOUT_MS = 30000;  // 30 second timeout for Llama to respond
+
+function scheduleLlamaTurn(room, aiIndex) {
+  if (!isLlamaConnected(room.code)) {
+    // No Llama connected, fall back to built-in AI
+    console.log(`[llama] No Llama connected for room ${room.code}, falling back to built-in AI`);
+    room.aiTimer = setTimeout(() => {
+      room.aiTimer = null;
+      if (!room.game || room.phase !== "await_draw") return;
+      aiTurn(room.game, aiIndex);
+      finishAiTurn(room, aiIndex);
+    }, AI_TURN_DELAY_MS);
+    return;
+  }
+  
+  // Send turn request to Llama
+  const game = room.game;
+  const player = game.players[aiIndex];
+  const topDiscard = game.discardPile[game.discardPile.length - 1];
+  
+  const turnRequest = {
+    type: "your_turn",
+    room: room.code,
+    player_index: aiIndex,
+    phase: "await_draw",
+    round_number: game.roundIndex + 1,
+    requirements: formatRequirements(game.currentRound().requirements),
+    hand: player.hand.map(c => ({ card: cardNotation(c), cid: c.cid })),
+    melds: player.melds.map(m => ({ type: m.type, cards: m.cards.map(c => cardNotation(c)) })),
+    has_laid_down: player.hasLaidDown,
+    discard_top: topDiscard ? cardNotation(topDiscard) : null,
+    deck_count: game.drawPile.length,
+    opponents: game.players
+      .map((p, i) => ({ player: p, index: i }))
+      .filter(({ index }) => index !== aiIndex)
+      .map(({ player: p, index }) => ({
+        player_index: index,
+        card_count: p.hand.length,
+        melds: p.melds.map(m => ({ type: m.type, cards: m.cards.map(c => cardNotation(c)) })),
+        has_laid_down: p.hasLaidDown,
+      })),
+  };
+  
+  sendToLlama(room.code, turnRequest);
+  
+  // Set timeout for Llama response
   room.aiTimer = setTimeout(() => {
     room.aiTimer = null;
+    console.log(`[llama] Timeout waiting for Llama in room ${room.code}, falling back to built-in AI`);
     if (!room.game || room.phase !== "await_draw") return;
-    const aiIndex = room.game.currentPlayerIndex;
-    if (!room.aiSeats[aiIndex]) return;
     aiTurn(room.game, aiIndex);
-    if (room.game.checkWin(room.game.players[aiIndex])) {
-      room.game.applyRoundScores(aiIndex);
-      room.phase = "game_over";
-      room.winnerIndex = aiIndex;
+    finishAiTurn(room, aiIndex);
+  }, LLAMA_TIMEOUT_MS);
+}
+
+function cardNotation(card) {
+  if (!card) return null;
+  if (card.rank === "JOKER") return "JK";
+  const suitMap = { hearts: "H", diamonds: "D", clubs: "C", spades: "S" };
+  return `${card.rank}${suitMap[card.suit]}`;
+}
+
+function handleLlamaAction(room, aiIndex, action) {
+  if (!room.game || room.phase !== "await_draw") return false;
+  if (room.game.currentPlayerIndex !== aiIndex) return false;
+  
+  // Clear the timeout
+  if (room.aiTimer) {
+    clearTimeout(room.aiTimer);
+    room.aiTimer = null;
+  }
+  
+  const game = room.game;
+  const player = game.players[aiIndex];
+  
+  try {
+    // Phase 1: Draw
+    if (action.draw === "discard") {
+      const card = game.drawFromDiscard(player);
+      if (!card) throw new Error("Discard pile empty");
     } else {
-      room.phase = "await_draw";
-      room.game.currentPlayerIndex = (aiIndex + 1) % room.game.players.length;
+      const card = game.drawFromStock(player);
+      if (!card) throw new Error("Deck empty");
     }
-    broadcastState(room);
-    scheduleAiTurn(room);
-  }, AI_TURN_DELAY_MS);
+    
+    // Phase 2: Meld (optional)
+    if (action.meld && !player.hasLaidDown) {
+      if (game.autoStageMelds(player)) {
+        game.tryLayDownStaged(player);
+      }
+    }
+    
+    // Phase 3: Layoffs (optional)
+    if (action.layoffs && player.hasLaidDown) {
+      for (const layoff of action.layoffs) {
+        const card = player.hand.find(c => c.cid === layoff.cid);
+        const targetMeld = game.players[layoff.player]?.melds[layoff.meld_index];
+        if (card && targetMeld) {
+          game.layOffCardToMeld(player, card, targetMeld);
+        }
+      }
+    }
+    
+    // Phase 4: Discard
+    let discardCard;
+    if (typeof action.discard === "number") {
+      discardCard = player.hand.find(c => c.cid === action.discard);
+    } else if (action.discard) {
+      // Parse notation
+      const notation = action.discard.toUpperCase();
+      discardCard = player.hand.find(c => cardNotation(c) === notation);
+    }
+    
+    if (!discardCard && player.hand.length > 0) {
+      // Default: discard first card
+      discardCard = player.hand[0];
+    }
+    
+    if (discardCard) {
+      game.discard(player, discardCard);
+    }
+    
+    finishAiTurn(room, aiIndex);
+    return true;
+    
+  } catch (e) {
+    console.error(`[llama] Error handling action: ${e.message}`);
+    // Fall back to built-in AI
+    aiTurn(game, aiIndex);
+    finishAiTurn(room, aiIndex);
+    return false;
+  }
 }
 
 function runAiTurns(room) {
@@ -513,6 +662,26 @@ setInterval(cleanupRooms, 30000);
 const botWss = createBotApiServer(server, "/api/bot");
 const wss = new WebSocketServer({ noServer: true });
 
+// Set up Llama action handler
+setLlamaActionHandler((roomCode, action) => {
+  const room = rooms.get(roomCode);
+  if (!room) {
+    return { error: "Room not found" };
+  }
+  if (!room.game) {
+    return { error: "Game not started" };
+  }
+  
+  const aiIndex = room.game.currentPlayerIndex;
+  if (!room.aiSeats[aiIndex] || room.aiSeats[aiIndex] !== "llama") {
+    return { error: "Not Llama's turn" };
+  }
+  
+  // Process the action
+  const success = handleLlamaAction(room, aiIndex, action);
+  return success ? { message: "Move accepted" } : { error: "Invalid move" };
+});
+
 // Centralized upgrade handler
 server.on("upgrade", (request, socket, head) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
@@ -592,6 +761,7 @@ wss.on("connection", (socket) => {
         sendError(socket, "Join a room first.");
         return;
       }
+      const aiType = msg.ai_type === "llama" ? "llama" : "builtin";
       const slot = room.aiSeats.findIndex((seat, idx) => {
         if (seat) return false;
         return !room.sockets[idx] || room.sockets[idx].readyState !== WebSocket.OPEN;
@@ -600,7 +770,7 @@ wss.on("connection", (socket) => {
         sendError(socket, "No open seats.");
         return;
       }
-      room.aiSeats[slot] = true;
+      room.aiSeats[slot] = aiType;
       room.lastActive = Date.now();
       updateRoomPhase(room);
       broadcastState(room);

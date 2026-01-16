@@ -1,10 +1,17 @@
 #!/usr/bin/env node
 /**
- * Simple test client for the bot API
- * Run: node scripts/test_bot.mjs
+ * Test client for the Llama AI bot API
+ * 
+ * Usage:
+ *   node scripts/test_bot.mjs [room_code]
+ * 
+ * If room_code is provided, joins that room.
+ * Otherwise, waits for you to tell it which room to join.
  */
 
 import WebSocket from "ws";
+
+const roomCode = process.argv[2];
 
 const ws = new WebSocket("ws://localhost:8000/api/bot", {
   perMessageDeflate: false
@@ -18,36 +25,29 @@ ws.on("message", (data) => {
   const msg = JSON.parse(data.toString());
   console.log("\n📨 Received:", JSON.stringify(msg, null, 2));
   
-  // Auto-play logic for testing
-  if (msg.type === "welcome") {
-    console.log("\n🎮 Starting new game...");
-    ws.send(JSON.stringify({ action: "new_game" }));
+  // Auto-join if room code provided
+  if (msg.type === "welcome" && roomCode) {
+    console.log(`\n🎮 Joining room ${roomCode}...`);
+    ws.send(JSON.stringify({ action: "join", room: roomCode }));
   }
   
-  if (msg.type === "your_turn" && msg.phase === "await_draw") {
-    // Just draw from deck
-    console.log("\n🃏 Drawing from deck...");
-    ws.send(JSON.stringify({ action: "draw_deck" }));
-  }
-  
-  // Track if we just tried to meld and failed
-  if (msg.type === "your_turn" && msg.phase === "await_discard") {
-    // Just discard first card (simple strategy)
-    // Cards are now { card: "7H", cid: 123 }
-    const cardInfo = msg.your_hand[0];
-    console.log(`\n🗑️ Discarding ${cardInfo.card} (cid: ${cardInfo.cid})...`);
-    // Can use either cid or the full object
-    ws.send(JSON.stringify({ action: "discard", card: cardInfo.cid }));
-  }
-  
-  if (msg.type === "you_melded") {
-    console.log("\n✅ Melded successfully!");
-    // Will get another your_turn to discard
-  }
-  
-  if (msg.type === "game_end") {
-    console.log("\n🏆 Game over!");
-    ws.close();
+  // When it's our turn, make a simple play
+  if (msg.type === "your_turn") {
+    console.log("\n🤔 Thinking...");
+    
+    // Simple strategy: draw from deck, discard first card
+    const hand = msg.hand;
+    const discardCard = hand[0];  // Just discard first card
+    
+    setTimeout(() => {
+      console.log(`\n🎴 Playing: draw deck, discard ${discardCard.card}`);
+      ws.send(JSON.stringify({
+        action: "play",
+        draw: "deck",
+        meld: true,  // Try to meld if possible
+        discard: discardCard.cid
+      }));
+    }, 1000);  // 1 second delay to simulate thinking
   }
 });
 
@@ -65,3 +65,13 @@ process.on("SIGINT", () => {
   console.log("\nClosing...");
   ws.close();
 });
+
+console.log("\nLlama AI Test Bot");
+console.log("==================");
+if (roomCode) {
+  console.log(`Will join room: ${roomCode}`);
+} else {
+  console.log("No room code provided. Create a room in the browser, then run:");
+  console.log("  node scripts/test_bot.mjs ROOM_CODE");
+}
+console.log("");

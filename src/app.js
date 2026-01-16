@@ -28,6 +28,7 @@ const roomCodeInput = document.getElementById("room-code");
 const createRoomBtn = document.getElementById("create-room");
 const joinRoomBtn = document.getElementById("join-room");
 const addAiBtn = document.getElementById("add-ai");
+const aiTypeSelect = document.getElementById("ai-type");
 const leaveRoomBtn = document.getElementById("leave-room");
 const buyBtn = document.getElementById("buy-card");
 const sortHandBtn = document.getElementById("sort-hand");
@@ -1578,7 +1579,8 @@ function addAiPlayer() {
     setMessage("Not connected to server.");
     return;
   }
-  sendSocket({ type: "add_ai" });
+  const aiType = aiTypeSelect ? aiTypeSelect.value : "builtin";
+  sendSocket({ type: "add_ai", ai_type: aiType });
 }
 
 function leaveRoomCleanup() {
@@ -1603,6 +1605,9 @@ function showRoomControls(inRoom) {
   joinRoomBtn.classList.toggle("hidden", inRoom);
   if (addAiBtn) {
     addAiBtn.classList.toggle("hidden", !inRoom);
+  }
+  if (aiTypeSelect) {
+    aiTypeSelect.classList.toggle("hidden", !inRoom);
   }
   leaveRoomBtn.classList.toggle("hidden", !inRoom);
   roomCodeInput.readOnly = inRoom;
