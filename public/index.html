@@ -19,6 +19,7 @@
           <div id="score" class="score">You: 0 | Opponent: 0</div>
         </div>
         <div class="controls">
+          <button id="rules-btn" type="button" class="btn-ghost">Rules</button>
           <button id="restart-btn" type="button">Restart</button>
           <button id="next-round-btn" type="button" class="hidden">Next Round</button>
           <div class="room-controls">
@@ -122,6 +123,51 @@
       </div>
     </div>
     <div id="win-celebration" class="win-celebration" aria-hidden="true"></div>
+    <div id="rules-modal" class="rules-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rules-title">
+      <div class="rules-card" role="document">
+        <div class="rules-header">
+          <h2 id="rules-title">Rules helper</h2>
+          <button id="rules-close" type="button" class="rules-close" aria-label="Close rules">Close</button>
+        </div>
+        <div class="rules-body">
+          <p class="rules-round">Current round: <span id="rules-round">Round 1</span></p>
+          <div class="rules-grid">
+            <section>
+              <h3>Turn flow</h3>
+              <ul>
+                <li>Draw first: deck or top discard.</li>
+                <li>Lay down required melds, then lay off.</li>
+                <li>Discard one card to end your turn.</li>
+              </ul>
+            </section>
+            <section>
+              <h3>Meld basics</h3>
+              <ul>
+                <li>Sets: same rank. Runs: same suit, consecutive.</li>
+                <li>Ace is low or high; no wrap-around.</li>
+                <li>At least 50% natural for required melds.</li>
+              </ul>
+            </section>
+            <section>
+              <h3>Wilds + lay offs</h3>
+              <ul>
+                <li>Wilds: 2s and jokers.</li>
+                <li>After laying down, add cards to any meld.</li>
+                <li>Wilds can be added on lay offs.</li>
+              </ul>
+            </section>
+            <section>
+              <h3>Buying (3+ players)</h3>
+              <ul>
+                <li>Non-current players can buy the top discard.</li>
+                <li>Cost: discard + one card from the deck.</li>
+                <li>Closest clockwise to discarder wins ties.</li>
+              </ul>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

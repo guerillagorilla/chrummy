@@ -17,6 +17,10 @@ const opponentMeldsEl = document.getElementById("opponent-melds");
 const opponentLogPanel = document.querySelector(".panel.log");
 const restartBtn = document.getElementById("restart-btn");
 const nextRoundBtn = document.getElementById("next-round-btn");
+const rulesBtn = document.getElementById("rules-btn");
+const rulesModal = document.getElementById("rules-modal");
+const rulesCloseBtn = document.getElementById("rules-close");
+const rulesRoundEl = document.getElementById("rules-round");
 const laydownSelectedBtn = document.getElementById("laydown-selected-btn");
 const autoStageBtn = document.getElementById("auto-stage-btn");
 const devModeToggle = document.getElementById("dev-mode");
@@ -404,6 +408,9 @@ function updateScore() {
   const roundSummary = roundData ? formatRequirements(roundData.requirements) : "";
   const roundLabel = roundSummary ? `Round ${roundIndex + 1}/${roundTotal}: ${roundSummary}` : `Round ${roundIndex + 1}/${roundTotal}`;
   const subtitleText = roundSummary ? `Round ${roundIndex + 1}: ${roundSummary}` : `Round ${roundIndex + 1}`;
+  if (rulesRoundEl) {
+    rulesRoundEl.textContent = roundSummary ? `Round ${roundIndex + 1}: ${roundSummary}` : `Round ${roundIndex + 1}`;
+  }
   const opponents = view.opponents ?? [];
   let opponentsLabel = "Opponents: 0";
   if (opponents.length === 1 && view.mode === "local") {
@@ -1130,6 +1137,35 @@ nextRoundBtn.addEventListener("click", () => {
   }
   advanceRound();
 });
+
+function openRulesModal() {
+  if (!rulesModal) return;
+  rulesModal.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+
+function closeRulesModal() {
+  if (!rulesModal) return;
+  rulesModal.classList.add("hidden");
+  document.body.classList.remove("modal-open");
+}
+
+if (rulesBtn && rulesModal) {
+  rulesBtn.addEventListener("click", openRulesModal);
+  if (rulesCloseBtn) {
+    rulesCloseBtn.addEventListener("click", closeRulesModal);
+  }
+  rulesModal.addEventListener("click", (event) => {
+    if (event.target === rulesModal) {
+      closeRulesModal();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !rulesModal.classList.contains("hidden")) {
+      closeRulesModal();
+    }
+  });
+}
 
 if (skipRoundBtn) {
   skipRoundBtn.addEventListener("click", () => {
