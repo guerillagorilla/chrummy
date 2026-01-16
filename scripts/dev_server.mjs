@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { Game, ROUNDS, canLayDownWithCard, formatRequirements } from "../src/engine/gameEngine.js";
 import { aiTurn, chooseDrawSource } from "../src/engine/ai.js";
-import { createBotApiServer, llamaConnections, sendToLlama, isLlamaConnected, setLlamaActionHandler } from "./bot_api.mjs";
+import { createBotApiServer, llamaConnections, sendToLlama, isLlamaConnected, setLlamaActionHandler, setLlamaJoinHandler } from "./bot_api.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -680,6 +680,23 @@ setLlamaActionHandler((roomCode, action) => {
   // Process the action
   const success = handleLlamaAction(room, aiIndex, action);
   return success ? { message: "Move accepted" } : { error: "Invalid move" };
+});
+
+// Handle Llama joining a room - check if it's their turn
+setLlamaJoinHandler((roomCode) => {
+  const room = rooms.get(roomCode);
+  if (!room || !room.game) return;
+  
+  const aiIndex = room.game.currentPlayerIndex;
+  if (room.aiSeats[aiIndex] === "llama" && room.phase === "await_draw") {
+    // It's Llama's turn and they just connected - cancel any fallback timer and give them the turn
+    if (room.aiTimer) {
+      clearTimeout(room.aiTimer);
+      room.aiTimer = null;
+    }
+    console.log(`[llama] Llama joined room ${roomCode} and it's their turn - sending state`);
+    scheduleLlamaTurn(room, aiIndex);
+  }
 });
 
 // Centralized upgrade handler

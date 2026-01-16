@@ -20,8 +20,15 @@ export const llamaConnections = new Map();  // roomCode -> WebSocket
 // Callback for when Llama sends an action
 let onLlamaAction = null;
 
+// Callback for when Llama joins a room
+let onLlamaJoin = null;
+
 export function setLlamaActionHandler(handler) {
   onLlamaAction = handler;
+}
+
+export function setLlamaJoinHandler(handler) {
+  onLlamaJoin = handler;
 }
 
 /**
@@ -106,6 +113,11 @@ function handleLlamaMessage(ws, msg, currentRoom, setRoom) {
     }));
     
     console.log(`[bot-api] Llama joined room ${roomCode}`);
+    
+    // Notify server that Llama joined - may need to trigger a turn
+    if (onLlamaJoin) {
+      onLlamaJoin(roomCode);
+    }
     return;
   }
   
