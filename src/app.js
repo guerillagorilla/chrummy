@@ -59,6 +59,9 @@ let winCelebrationTimer = null;
 let draggingCardId = null;
 let lastDropTargetId = null;
 let revealOpponentCardId = null;
+let revealOpponentType = null; // 'discard' or 'wild'
+let revealOpponentCard = null; // the actual card object for display
+let revealOpponentPlayerIndex = null;
 let revealTimer = null;
 let insertMarkerEl = null;
 let pendingDiscardCardId = null;
@@ -725,54 +728,66 @@ function renderOpponentHands(view) {
   list.className = "opponent-list";
   opponents.forEach((opponent) => {
     const stack = document.createElement("div");
-    stack.className = "opponent-stack";
+    stack.className = "opponent-stack compact";
     if (view.mode === "multiplayer" && view.currentPlayerIndex === opponent.playerIndex) {
       stack.classList.add("current-turn");
     }
     if (opponent.connected === false) {
       stack.classList.add("disconnected");
     }
+    
+    // Check if this opponent has a revealed card
+    const hasReveal = revealOpponentPlayerIndex === opponent.playerIndex && !!revealOpponentCard;
+    if (hasReveal && revealOpponentType === "wild") {
+      stack.classList.add("wild-pickup");
+    } else if (hasReveal && revealOpponentType === "discard") {
+      stack.classList.add("discard-pickup");
+    }
+    
     const label = document.createElement("div");
     label.className = "opponent-label";
     label.textContent = opponentLabel(opponent, view);
-    const hand = document.createElement("div");
-    hand.className = "hand opponent-hand";
-    const isSinglePlayer = view.mode === "local" && opponents.length === 1;
-    if (isSinglePlayer) {
-      hand.classList.add("curved-hand", "curved-hand-top");
+    
+    // Compact card stack display
+    const cardCount = opponent.handCount ?? (Array.isArray(opponent.hand) ? opponent.hand.length : 0);
+    const cardsContainer = document.createElement("div");
+    cardsContainer.className = "opponent-cards-compact";
+    
+    // Render 3 stacked mini cards
+    for (let i = 0; i < Math.min(3, cardCount); i++) {
+      const miniCard = document.createElement("div");
+      miniCard.className = "mini-card";
+      cardsContainer.appendChild(miniCard);
     }
-    if ((view.mode === "local" || devMode) && Array.isArray(opponent.hand)) {
-      const cardCount = opponent.hand.length;
-      const middle = cardCount > 0 ? (cardCount - 1) / 2 : 0;
-    if (isSinglePlayer) {
-      hand.style.setProperty("--hand-count", cardCount);
-      hand.style.setProperty("--hand-middle", middle);
-      const spacingScale = 1 + Math.min(0.4, Math.max(0, (cardCount - 7) * 0.03));
-      hand.style.setProperty("--hand-spacing-scale", spacingScale.toFixed(2));
-      applyHandGap(hand, cardCount);
-      applyHandLift(hand);
+    
+    // Card count badge
+    const countBadge = document.createElement("div");
+    countBadge.className = "card-count-badge";
+    countBadge.textContent = cardCount;
+    cardsContainer.appendChild(countBadge);
+    
+    // Wild indicator
+    if (hasReveal && revealOpponentType === "wild") {
+      const wildIndicator = document.createElement("div");
+      wildIndicator.className = "wild-indicator";
+      wildIndicator.textContent = "WILD!";
+      cardsContainer.appendChild(wildIndicator);
     }
-      for (let i = 0; i < cardCount; i++) {
-        const card = opponent.hand[i];
-        const revealThis = devMode || card.cid === revealOpponentCardId;
-        const cardEl = renderCard(card, {
-          faceUp: revealThis,
-        });
-        if (isSinglePlayer) {
-          cardEl.style.setProperty("--hand-index", i);
-        }
-        if (!devMode && card.cid === revealOpponentCardId) {
-          cardEl.classList.add("reveal");
-        }
-        hand.appendChild(cardEl);
+    
+    // Discard pickup indicator - show the card
+    if (hasReveal && revealOpponentType === "discard" && revealOpponentCard) {
+      const pickedCard = document.createElement("div");
+      pickedCard.className = "picked-card";
+      const suit = SuitSymbols[revealOpponentCard.suit] || "";
+      const rank = revealOpponentCard.rank === JokerRank ? "🃏" : revealOpponentCard.rank;
+      pickedCard.innerHTML = `<span class="picked-rank">${rank}</span><span class="picked-suit">${suit}</span>`;
+      if (revealOpponentCard.suit === "Hearts" || revealOpponentCard.suit === "Diamonds") {
+        pickedCard.classList.add("red");
       }
-    } else {
-      const count = opponent.handCount ?? 0;
-      for (let i = 0; i < count; i += 1) {
-        hand.appendChild(renderCard(null, { faceUp: false }));
-      }
+      cardsContainer.appendChild(pickedCard);
     }
-    stack.append(label, hand);
+    
+    stack.append(label, cardsContainer);
     list.appendChild(stack);
   });
   opponentHandEl.appendChild(list);
@@ -846,14 +861,21 @@ function startRound() {
   lastWinner = null;
   stopWinCelebration();
   resetSelections();
+  clearRevealState();
+  opponentLogEl.innerHTML = "";
+  setMessage("Your turn: draw from deck or discard.");
+  renderAll();
+}
+
+function clearRevealState() {
   revealOpponentCardId = null;
+  revealOpponentCard = null;
+  revealOpponentType = null;
+  revealOpponentPlayerIndex = null;
   if (revealTimer) {
     clearTimeout(revealTimer);
     revealTimer = null;
   }
-  opponentLogEl.innerHTML = "";
-  setMessage("Your turn: draw from deck or discard.");
-  renderAll();
 }
 
 function advanceRound() {
@@ -863,11 +885,7 @@ function advanceRound() {
   lastWinner = null;
   stopWinCelebration();
   resetSelections();
-  revealOpponentCardId = null;
-  if (revealTimer) {
-    clearTimeout(revealTimer);
-    revealTimer = null;
-  }
+  clearRevealState();
   opponentLogEl.innerHTML = "";
   setMessage("Your turn: draw from deck or discard.");
   renderAll();
@@ -969,19 +987,24 @@ function runAiTurn() {
   if (result.drewCard) {
     playSound("draw");
   }
-  const shouldReveal =
-    result.drewCard &&
-    !devMode &&
-    (result.drawChoice === "discard" || (result.drawChoice === "deck" && result.drewCard.isWild()));
+  const isWildDraw = result.drawChoice === "deck" && result.drewCard && (typeof result.drewCard.isWild === 'function' ? result.drewCard.isWild() : false);
+  const isDiscardDraw = result.drawChoice === "discard";
+  const shouldReveal = result.drewCard && !devMode && (isDiscardDraw || isWildDraw);
   if (shouldReveal) {
     revealOpponentCardId = result.drewCard.cid;
+    revealOpponentCard = result.drewCard;
+    revealOpponentType = isWildDraw ? "wild" : "discard";
+    revealOpponentPlayerIndex = 1; // AI is always player 1 in local mode
     if (revealTimer) {
       clearTimeout(revealTimer);
     }
     revealTimer = setTimeout(() => {
       revealOpponentCardId = null;
+      revealOpponentCard = null;
+      revealOpponentType = null;
+      revealOpponentPlayerIndex = null;
       renderAll();
-    }, 1500);
+    }, 3000);
   }
   if (result.discarded) {
     playSound("discard");
@@ -1135,7 +1158,7 @@ function setMultiplayerEnabled(enabled) {
   multiplayerEnabled = enabled;
   if (enabled && !wasEnabled) {
     opponentLogEl.innerHTML = "";
-    revealOpponentCardId = null;
+    clearRevealState();
   }
   devModeToggle.disabled = false;
 }

@@ -269,6 +269,161 @@ button.active {
   flex-wrap: nowrap;
 }
 
+/* Compact opponent hand display (Option A) */
+.opponent-stack.compact {
+  align-items: center;
+}
+
+.opponent-cards-compact {
+  position: relative;
+  width: 54px;
+  height: 76px;
+}
+
+.opponent-cards-compact .mini-card {
+  position: absolute;
+  width: 44px;
+  height: 62px;
+  background: linear-gradient(135deg, #1a365d 0%, #0d1b2a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.opponent-cards-compact .mini-card:nth-child(1) {
+  transform: translate(0, 0) rotate(-2deg);
+}
+
+.opponent-cards-compact .mini-card:nth-child(2) {
+  transform: translate(3px, -3px) rotate(0deg);
+}
+
+.opponent-cards-compact .mini-card:nth-child(3) {
+  transform: translate(6px, -6px) rotate(2deg);
+}
+
+.opponent-cards-compact .card-count-badge {
+  position: absolute;
+  bottom: -6px;
+  right: -6px;
+  background: var(--accent);
+  color: #1a1a1a;
+  font-size: 12px;
+  font-weight: bold;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  z-index: 5;
+}
+
+/* Current turn indicator */
+.opponent-stack.compact.current-turn .opponent-cards-compact {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+.opponent-stack.compact.current-turn .opponent-label::after {
+  content: " ⟵";
+  color: var(--accent);
+}
+
+/* Wild pickup indicator */
+.opponent-stack.compact.wild-pickup .opponent-cards-compact {
+  animation: wild-glow 0.6s ease infinite;
+}
+
+.opponent-stack.compact.wild-pickup .card-count-badge {
+  background: var(--danger);
+  color: white;
+  animation: pulse-badge 0.5s ease infinite;
+}
+
+.opponent-stack.compact.wild-pickup .wild-indicator {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--danger);
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+}
+
+@keyframes wild-glow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(220, 38, 38, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(220, 38, 38, 0.8);
+  }
+}
+
+@keyframes pulse-badge {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+/* Discard pickup indicator */
+.opponent-stack.compact.discard-pickup .picked-card {
+  position: absolute;
+  top: -8px;
+  right: -24px;
+  width: 38px;
+  height: 52px;
+  background: linear-gradient(145deg, #fff6e6, #efe2c9 60%);
+  border: 2px solid var(--accent);
+  border-radius: 5px;
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  animation: float-in 0.4s ease;
+  z-index: 10;
+  color: #1a1a1a;
+}
+
+.opponent-stack.compact.discard-pickup .picked-card.red {
+  color: #dc2626;
+}
+
+.opponent-stack.compact.discard-pickup .picked-card .picked-rank {
+  font-weight: bold;
+  line-height: 1;
+}
+
+.opponent-stack.compact.discard-pickup .picked-card .picked-suit {
+  font-size: 16px;
+  line-height: 1;
+}
+
+@keyframes float-in {
+  0% {
+    transform: translateY(20px) scale(0.5);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
 .opponent-row .log {
   width: 200px;
   flex-shrink: 0;
@@ -955,8 +1110,8 @@ body.variant-player-grid .table {
     "topbar topbar"
     "opponents center"
     "you you";
-  grid-template-columns: 1fr 1.2fr;
-  grid-template-rows: auto 1fr 1fr;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   padding: 14px;
   gap: 12px;
 }
@@ -967,25 +1122,28 @@ body.variant-player-grid .topbar {
 
 body.variant-player-grid .opponent-row {
   grid-area: opponents;
-  display: grid;
-  grid-template-rows: 1fr auto;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   min-height: 0;
 }
 
 body.variant-player-grid .opponent-row .panel.opponent {
   min-height: 0;
+  flex: 0 0 auto;
+  padding: 10px;
 }
 
 body.variant-player-grid .opponent-hands {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  overflow: visible;
+  padding: 10px;
 }
 
-body.variant-player-grid .opponent-stack {
-  padding: 8px;
+body.variant-player-grid .opponent-stack.compact {
+  padding: 12px 16px 16px;
   border-radius: 10px;
   background: rgba(5, 20, 14, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.08);
