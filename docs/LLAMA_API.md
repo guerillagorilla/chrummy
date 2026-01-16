@@ -273,11 +273,76 @@ ws.on('message', async (data) => {
 
 ## Setup
 
+### Prerequisites
+
 1. Start the game server: `npm run dev`
-2. Open browser to `http://localhost:8000`
-3. Create a room (note the room code)
-4. Select "Llama AI" from dropdown, click "Add AI"
-5. Connect your Llama integration to the room code
+2. Have your Llama connector ready to connect to `ws://localhost:8000/api/bot`
+
+### Single Player vs Llama AI
+
+```
+Browser (you) vs Llama AI
+```
+
+1. Open browser to `http://localhost:8000`
+2. Click **Create** to create a room
+3. Note the 4-letter room code (e.g., `ABCD`) shown in the top bar
+4. **Start your Llama connector** and have it join the room:
+   ```json
+   { "action": "join", "room": "ABCD" }
+   ```
+5. In browser, select **"Llama AI"** from the dropdown
+6. Click **"Add AI"**
+7. Game starts! You and Llama take turns.
+
+### Multiplayer with Llama AI
+
+```
+Browser (Player 1) + Browser (Player 2) + Llama AI
+```
+
+1. **Player 1:** Open browser, select "3P" (or more) from player count dropdown
+2. **Player 1:** Click **Create**, note the room code (e.g., `WXYZ`)
+3. **Player 2:** Open browser, enter room code `WXYZ`, click **Join**
+4. **Start your Llama connector** and have it join:
+   ```json
+   { "action": "join", "room": "WXYZ" }
+   ```
+5. **Any player in room:** Select **"Llama AI"** from dropdown, click **"Add AI"**
+6. Game starts when all seats are filled!
+
+### Multiple Llama AIs
+
+You can add multiple Llama AIs to a game:
+
+1. Create a room with 3+ players
+2. Start multiple Llama connectors, each joining the same room
+3. Click **"Add AI"** (with Llama selected) for each AI seat
+4. Each Llama connector will receive `your_turn` when it's their turn
+
+**Note:** Currently, all Llama AIs share the same WebSocket connection per room. For truly separate AI personalities, you'd need to modify the connector to track which player index it's controlling.
+
+### Testing with the Demo Bot
+
+The repo includes a simple test bot:
+
+```bash
+# Terminal 1: Start server
+npm run dev
+
+# Terminal 2: Create room in browser, get code (e.g., ABCD), then:
+node scripts/test_bot.mjs ABCD
+```
+
+The test bot uses a dumb strategy (draw from deck, discard first card) but verifies the API works.
+
+### Connection Timing
+
+The Llama connector can connect:
+- **Before** adding the AI in the browser (recommended)
+- **After** adding the AI (the server will send the turn state when Llama connects)
+
+If Llama isn't connected when it's their turn, the server waits 30 seconds then falls back to built-in AI.
 
 ## Timeout
 
