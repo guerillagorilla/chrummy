@@ -10,12 +10,14 @@ The game server exposes a WebSocket API at `ws://localhost:8000/api/bot` that al
 - Send back moves (draw, meld, discard)
 - Optionally send chat messages (trash talk)
 
+`docs/rules.md` is the source of truth for gameplay rules. This document is a quick integration reference.
+
 ## Connection Flow
 
 ```
 1. Connect to ws://localhost:8000/api/bot
 2. Receive: { type: "welcome", ... }
-3. Send: { action: "join", room: "ABCD" }
+3. Send: { action: "join", room: "ABCD", seat: 1 }
 4. Receive: { type: "joined", room: "ABCD", ... }
 5. Wait for: { type: "your_turn", ... }
 6. Send: { action: "play", draw: "deck", discard: "7H" }
@@ -42,6 +44,7 @@ Sent after successfully joining a room.
 {
   "type": "joined",
   "room": "ABCD",
+  "seat": 1,
   "message": "Joined room ABCD as Llama AI. Waiting for game to start and your turn."
 }
 ```
@@ -53,6 +56,7 @@ Sent when it's the AI's turn to play.
   "type": "your_turn",
   "room": "ABCD",
   "player_index": 1,
+  "seat": 1,
   "phase": "await_draw",
   "round_number": 1,
   "requirements": "2 3-of-a-kinds",
@@ -105,12 +109,14 @@ Join a room as the Llama AI.
 ```json
 {
   "action": "join",
-  "room": "ABCD"
+  "room": "ABCD",
+  "seat": 1
 }
 ```
+`seat` is optional today (single Llama per room). When multiple Llama players are enabled, send the seat index you control.
 
 #### `play`
-Make a move. All fields except `action` and `draw` and `discard` are optional.
+Make a move. `action`, `draw`, and `discard` are required unless you go out by laying off your last card.
 ```json
 {
   "action": "play",
@@ -124,7 +130,7 @@ Make a move. All fields except `action` and `draw` and `discard` are optional.
 |-------|----------|-------------|
 | `draw` | Yes | `"deck"` or `"discard"` - where to draw from |
 | `meld` | No | `true` to auto-meld if possible |
-| `discard` | Yes | Card to discard. Can be notation (`"7H"`) or cid (`42`) |
+| `discard` | Yes* | Card to discard. Can be notation (`"7H"`) or cid (`42`). Required unless you empty your hand via layoff. |
 | `layoffs` | No | Array of layoffs: `[{ "cid": 42, "player": 0, "meld_index": 0 }]` |
 
 ## Card Notation
@@ -172,7 +178,7 @@ The game has 7 rounds with increasing requirements:
 ### Wild Cards
 - **2s** and **Jokers** are wild
 - Can substitute for any card in a meld
-- Cannot have more wilds than natural cards in a meld
+- Required melds must be at least 50% natural unless the meld is all wilds
 
 ### Turn Sequence
 1. **Draw** - Take one card from deck OR discard pile
@@ -188,11 +194,9 @@ The game has 7 rounds with increasing requirements:
 ### Scoring
 - Winner scores 0
 - Losers score the point value of cards remaining in hand:
-  - Number cards (3-10): face value
-  - Face cards (J, Q, K): 10 points
-  - Aces: 15 points
-  - 2s: 20 points
-  - Jokers: 50 points
+  - 3–9: 5 points
+  - 10–A: 10 points
+  - 2s and Jokers: 20 points
 
 ### Winning
 - Round: First to empty your hand (meld everything + discard last card)
@@ -239,7 +243,7 @@ ws.on('message', async (data) => {
   const msg = JSON.parse(data);
   
   if (msg.type === 'welcome') {
-    ws.send(JSON.stringify({ action: 'join', room: 'ABCD' }));
+    ws.send(JSON.stringify({ action: 'join', room: 'ABCD', seat: 1 }));
   }
   
   if (msg.type === 'your_turn') {
@@ -289,7 +293,7 @@ Browser (you) vs Llama AI
 3. Note the 4-letter room code (e.g., `ABCD`) shown in the top bar
 4. **Start your Llama connector** and have it join the room:
    ```json
-   { "action": "join", "room": "ABCD" }
+   { "action": "join", "room": "ABCD", "seat": 1 }
    ```
 5. In browser, select **"Llama AI"** from the dropdown
 6. Click **"Add AI"**
@@ -306,7 +310,7 @@ Browser (Player 1) + Browser (Player 2) + Llama AI
 3. **Player 2:** Open browser, enter room code `WXYZ`, click **Join**
 4. **Start your Llama connector** and have it join:
    ```json
-   { "action": "join", "room": "WXYZ" }
+   { "action": "join", "room": "WXYZ", "seat": 1 }
    ```
 5. **Any player in room:** Select **"Llama AI"** from dropdown, click **"Add AI"**
 6. Game starts when all seats are filled!
@@ -316,11 +320,11 @@ Browser (Player 1) + Browser (Player 2) + Llama AI
 You can add multiple Llama AIs to a game:
 
 1. Create a room with 3+ players
-2. Start multiple Llama connectors, each joining the same room
+2. Start multiple Llama connectors, each joining the same room with a unique seat index
 3. Click **"Add AI"** (with Llama selected) for each AI seat
 4. Each Llama connector will receive `your_turn` when it's their turn
 
-**Note:** Currently, all Llama AIs share the same WebSocket connection per room. For truly separate AI personalities, you'd need to modify the connector to track which player index it's controlling.
+**Note:** Today, if no seat is provided, the server treats the connection as the single Llama for the room. For multiple Llama AIs, each connector must provide a unique `seat`.
 
 ### Testing with the Demo Bot
 

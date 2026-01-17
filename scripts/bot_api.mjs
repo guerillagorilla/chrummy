@@ -15,7 +15,9 @@
 import { WebSocketServer, WebSocket } from "ws";
 
 // Track Llama connections per room
-export const llamaConnections = new Map();  // roomCode -> WebSocket
+// Map: roomCode -> Map(seatKey -> WebSocket)
+// seatKey is either a number (player index) or "default"
+export const llamaConnections = new Map();
 
 // Callback for when Llama sends an action
 let onLlamaAction = null;
@@ -51,13 +53,14 @@ export function createBotApiServer(server, path = "/api/bot") {
   wss.on("connection", (ws) => {
     console.log("[bot-api] Llama service connected");
     let joinedRoom = null;
+    let joinedSeat = null;
     
     // Send welcome message
     ws.send(JSON.stringify({
       type: "welcome",
       message: "Connected to Chrummy Bot API",
       usage: {
-        join: { action: "join", room: "ABCD" },
+        join: { action: "join", room: "ABCD", seat: 1 },
         action: { 
           action: "play", 
           draw: "deck|discard",
@@ -72,7 +75,10 @@ export function createBotApiServer(server, path = "/api/bot") {
     ws.on("message", (data) => {
       try {
         const msg = JSON.parse(data.toString());
-        handleLlamaMessage(ws, msg, joinedRoom, (room) => { joinedRoom = room; });
+        handleLlamaMessage(ws, msg, joinedRoom, joinedSeat, (room, seat) => {
+          joinedRoom = room;
+          joinedSeat = seat;
+        });
       } catch (e) {
         ws.send(JSON.stringify({ type: "error", message: `Invalid JSON: ${e.message}` }));
       }
@@ -81,7 +87,14 @@ export function createBotApiServer(server, path = "/api/bot") {
     ws.on("close", () => {
       console.log("[bot-api] Llama service disconnected");
       if (joinedRoom) {
-        llamaConnections.delete(joinedRoom);
+        const roomConnections = llamaConnections.get(joinedRoom);
+        if (roomConnections) {
+          const seatKey = joinedSeat ?? "default";
+          roomConnections.delete(seatKey);
+          if (roomConnections.size === 0) {
+            llamaConnections.delete(joinedRoom);
+          }
+        }
       }
     });
   });
@@ -89,34 +102,46 @@ export function createBotApiServer(server, path = "/api/bot") {
   return wss;
 }
 
-function handleLlamaMessage(ws, msg, currentRoom, setRoom) {
+function handleLlamaMessage(ws, msg, currentRoom, currentSeat, setRoom) {
   if (msg.action === "join") {
     const roomCode = String(msg.room || "").toUpperCase();
     if (!roomCode) {
       ws.send(JSON.stringify({ type: "error", message: "Room code required" }));
       return;
     }
+    const seat = Number.isFinite(msg.seat) ? Number(msg.seat) : null;
     
     // Leave previous room if any
     if (currentRoom) {
-      llamaConnections.delete(currentRoom);
+      const roomConnections = llamaConnections.get(currentRoom);
+      if (roomConnections) {
+        const seatKey = currentSeat ?? "default";
+        roomConnections.delete(seatKey);
+        if (roomConnections.size === 0) {
+          llamaConnections.delete(currentRoom);
+        }
+      }
     }
     
     // Join new room
-    llamaConnections.set(roomCode, ws);
-    setRoom(roomCode);
+    const roomConnections = llamaConnections.get(roomCode) ?? new Map();
+    const seatKey = seat ?? "default";
+    roomConnections.set(seatKey, ws);
+    llamaConnections.set(roomCode, roomConnections);
+    setRoom(roomCode, seat);
     
     ws.send(JSON.stringify({
       type: "joined",
       room: roomCode,
+      seat,
       message: `Joined room ${roomCode} as Llama AI. Waiting for game to start and your turn.`
     }));
     
-    console.log(`[bot-api] Llama joined room ${roomCode}`);
+    console.log(`[bot-api] Llama joined room ${roomCode}${seat !== null ? ` seat ${seat}` : ""}`);
     
     // Notify server that Llama joined - may need to trigger a turn
     if (onLlamaJoin) {
-      onLlamaJoin(roomCode);
+      onLlamaJoin(roomCode, seat);
     }
     return;
   }
@@ -129,11 +154,15 @@ function handleLlamaMessage(ws, msg, currentRoom, setRoom) {
     
     // Call the action handler if set
     if (onLlamaAction) {
-      const result = onLlamaAction(currentRoom, msg);
-      if (result.error) {
-        ws.send(JSON.stringify({ type: "error", message: result.error }));
-      } else {
-        ws.send(JSON.stringify({ type: "action_accepted", message: result.message || "Move accepted" }));
+      try {
+        const result = onLlamaAction(currentRoom, currentSeat, msg);
+        if (result.error) {
+          ws.send(JSON.stringify({ type: "error", message: result.error }));
+        } else {
+          ws.send(JSON.stringify({ type: "action_accepted", message: result.message || "Move accepted" }));
+        }
+      } catch (e) {
+        ws.send(JSON.stringify({ type: "error", message: `Server error: ${e.message}` }));
       }
     } else {
       ws.send(JSON.stringify({ type: "error", message: "Server not ready to accept actions" }));
@@ -165,8 +194,14 @@ export function getLlamaPendingAction(roomCode) {
 /**
  * Send a message to the Llama service for a room
  */
-export function sendToLlama(roomCode, message) {
-  const ws = llamaConnections.get(roomCode);
+export function sendToLlama(roomCode, message, seat = null) {
+  const roomConnections = llamaConnections.get(roomCode);
+  if (!roomConnections) return false;
+  const seatKey = seat ?? "default";
+  let ws = roomConnections.get(seatKey);
+  if (!ws && seat !== null) {
+    ws = roomConnections.get("default");
+  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(message));
     return true;
@@ -177,7 +212,13 @@ export function sendToLlama(roomCode, message) {
 /**
  * Check if Llama is connected for a room
  */
-export function isLlamaConnected(roomCode) {
-  const ws = llamaConnections.get(roomCode);
-  return ws && ws.readyState === WebSocket.OPEN;
+export function isLlamaConnected(roomCode, seat = null) {
+  const roomConnections = llamaConnections.get(roomCode);
+  if (!roomConnections) return false;
+  const seatKey = seat ?? "default";
+  let ws = roomConnections.get(seatKey);
+  if (!ws && seat !== null) {
+    ws = roomConnections.get("default");
+  }
+  return Boolean(ws && ws.readyState === WebSocket.OPEN);
 }

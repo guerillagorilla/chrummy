@@ -4,8 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { Game, ROUNDS, canLayDownWithCard, formatRequirements } from "../src/engine/gameEngine.js";
-import { aiTurn, chooseDrawSource } from "../src/engine/ai.js";
-import { createBotApiServer, llamaConnections, sendToLlama, isLlamaConnected, setLlamaActionHandler, setLlamaJoinHandler } from "./bot_api.mjs";
+import { aiTurn } from "../src/engine/ai.js";
+import { createBotApiServer, sendToLlama, isLlamaConnected, setLlamaActionHandler, setLlamaJoinHandler } from "./bot_api.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -307,8 +307,20 @@ function finishAiTurn(room, aiIndex) {
 // Llama AI turn handling
 const LLAMA_TIMEOUT_MS = 30000;  // 30 second timeout for Llama to respond
 
+function countLlamaSeats(room) {
+  return room.aiSeats.filter((seat) => seat === "llama").length;
+}
+
+function getSingleLlamaSeat(room) {
+  if (countLlamaSeats(room) !== 1) return null;
+  return room.aiSeats.findIndex((seat) => seat === "llama");
+}
+
 function scheduleLlamaTurn(room, aiIndex) {
-  if (!isLlamaConnected(room.code)) {
+  const singleSeat = getSingleLlamaSeat(room);
+  const hasSeatConnection = isLlamaConnected(room.code, aiIndex);
+  const hasDefaultConnection = isLlamaConnected(room.code);
+  if (!hasSeatConnection && !(singleSeat === aiIndex && hasDefaultConnection)) {
     // No Llama connected, fall back to built-in AI
     console.log(`[llama] No Llama connected for room ${room.code}, falling back to built-in AI`);
     room.aiTimer = setTimeout(() => {
@@ -348,7 +360,7 @@ function scheduleLlamaTurn(room, aiIndex) {
       })),
   };
   
-  sendToLlama(room.code, turnRequest);
+  sendToLlama(room.code, turnRequest, aiIndex);
   
   // Set timeout for Llama response
   room.aiTimer = setTimeout(() => {
@@ -381,14 +393,25 @@ function handleLlamaAction(room, aiIndex, action) {
   const player = game.players[aiIndex];
   
   try {
+    if (room.maxPlayers >= 3 && room.buyState && !room.buyState.resolved) {
+      const buyResult = resolveBuy(room);
+      if (buyResult) {
+        broadcastBuy(room, buyResult);
+        broadcastState(room);
+      }
+    }
+
     // Phase 1: Draw
     if (action.draw === "discard") {
+      if (room.buyState?.resolved) throw new Error("Discard was bought");
       const card = game.drawFromDiscard(player);
       if (!card) throw new Error("Discard pile empty");
     } else {
       const card = game.drawFromStock(player);
       if (!card) throw new Error("Deck empty");
     }
+    room.phase = "await_discard";
+    room.buyState = null;
     
     // Phase 2: Meld (optional)
     if (action.meld && !player.hasLaidDown) {
@@ -407,10 +430,21 @@ function handleLlamaAction(room, aiIndex, action) {
         }
       }
     }
+
+    if (game.checkWin(player)) {
+      game.applyRoundScores(aiIndex);
+      room.phase = "game_over";
+      room.winnerIndex = aiIndex;
+      broadcastState(room);
+      runAiTurns(room);
+      return true;
+    }
     
     // Phase 4: Discard
     let discardCard;
-    if (typeof action.discard === "number") {
+    if (!action.discard) {
+      throw new Error("Discard required");
+    } else if (typeof action.discard === "number") {
       discardCard = player.hand.find(c => c.cid === action.discard);
     } else if (action.discard) {
       // Parse notation
@@ -418,16 +452,31 @@ function handleLlamaAction(room, aiIndex, action) {
       discardCard = player.hand.find(c => cardNotation(c) === notation);
     }
     
-    if (!discardCard && player.hand.length > 0) {
-      // Default: discard first card
-      discardCard = player.hand[0];
-    }
+    if (!discardCard) throw new Error("Discard card not in hand");
     
     if (discardCard) {
+      if (!player.hasLaidDown && player.stagedMelds.length > 0) {
+        game.clearStaged(player);
+      }
       game.discard(player, discardCard);
     }
     
-    finishAiTurn(room, aiIndex);
+    room.buyState = {
+      discardCid: discardCard.cid,
+      requests: new Set(),
+      resolved: false,
+    };
+    queueAiBuys(room);
+    if (game.checkWinAfterDiscard(player)) {
+      game.applyRoundScores(aiIndex);
+      room.phase = "game_over";
+      room.winnerIndex = aiIndex;
+    } else {
+      room.phase = "await_draw";
+      game.currentPlayerIndex = (aiIndex + 1) % game.players.length;
+    }
+    broadcastState(room);
+    runAiTurns(room);
     return true;
     
   } catch (e) {
@@ -594,7 +643,9 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.url === "/api/rules") {
+  const cleanUrl = req.url.split("?")[0];
+
+  if (cleanUrl === "/api/rules") {
     writeHead(res, 200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       game: "Chinese Rummy",
@@ -612,7 +663,8 @@ const server = http.createServer(async (req, res) => {
       },
       melds: {
         set: "3+ cards of same rank (e.g., 7H 7S 7D)",
-        run: "4+ consecutive cards of same suit (e.g., 4H 5H 6H 7H)"
+        run: "4+ consecutive cards of same suit (e.g., 4H 5H 6H 7H)",
+        natural_rule: "Required melds must be at least 50% natural unless the meld is all wilds."
       },
       turn_sequence: [
         "1. Draw from deck OR discard pile",
@@ -621,14 +673,13 @@ const server = http.createServer(async (req, res) => {
         "4. Discard one card"
       ],
       scoring: {
-        "3-10": "face value",
-        "J,Q,K": 10,
-        "A": 15,
+        "3-9": 5,
+        "10-A": 10,
         "2": 20,
-        "JK": 50
+        "JK": 20
       },
       wild_cards: "2s and Jokers can substitute for any card in a meld",
-      winning: "Empty your hand by melding all cards and discarding last card"
+      winning: "Empty your hand by melding all cards and discarding last card (or lay off your last card)."
     }, null, 2));
     return;
   }
@@ -655,7 +706,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const cleanUrl = req.url.split("?")[0];
   const candidates = candidatePathsForUrl(cleanUrl);
   if (!candidates) {
     writeHead(res, 403);
@@ -702,7 +752,7 @@ const botWss = createBotApiServer(server, "/api/bot");
 const wss = new WebSocketServer({ noServer: true });
 
 // Set up Llama action handler
-setLlamaActionHandler((roomCode, action) => {
+setLlamaActionHandler((roomCode, seat, action) => {
   const room = rooms.get(roomCode);
   if (!room) {
     return { error: "Room not found" };
@@ -711,8 +761,15 @@ setLlamaActionHandler((roomCode, action) => {
     return { error: "Game not started" };
   }
   
-  const aiIndex = room.game.currentPlayerIndex;
+  const singleSeat = getSingleLlamaSeat(room);
+  const aiIndex = seat ?? (singleSeat === room.game.currentPlayerIndex ? room.game.currentPlayerIndex : null);
+  if (aiIndex === null) {
+    return { error: "Seat required for Llama action" };
+  }
   if (!room.aiSeats[aiIndex] || room.aiSeats[aiIndex] !== "llama") {
+    return { error: "Not Llama's turn" };
+  }
+  if (room.game.currentPlayerIndex !== aiIndex) {
     return { error: "Not Llama's turn" };
   }
   
@@ -722,12 +779,14 @@ setLlamaActionHandler((roomCode, action) => {
 });
 
 // Handle Llama joining a room - check if it's their turn
-setLlamaJoinHandler((roomCode) => {
+setLlamaJoinHandler((roomCode, seat) => {
   const room = rooms.get(roomCode);
   if (!room || !room.game) return;
   
-  const aiIndex = room.game.currentPlayerIndex;
-  if (room.aiSeats[aiIndex] === "llama" && room.phase === "await_draw") {
+  const singleSeat = getSingleLlamaSeat(room);
+  const aiIndex = seat ?? singleSeat;
+  if (aiIndex === null) return;
+  if (room.aiSeats[aiIndex] === "llama" && room.phase === "await_draw" && room.game.currentPlayerIndex === aiIndex) {
     // It's Llama's turn and they just connected - cancel any fallback timer and give them the turn
     if (room.aiTimer) {
       clearTimeout(room.aiTimer);
