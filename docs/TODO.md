@@ -79,7 +79,7 @@
   - [x] Filtered state per player (hide opponent hand)
   - [x] Client create/join room controls in the header
 - **Room System**
-  - [x] Room codes (e.g., "ABCD") and join flow
+  - [x] Room codes (e.g., "MOON STAR") and join flow
   - [x] Basic disconnect handling (room slot freed; rejoin allowed)
   - [ ] Matchmaking
 - **Polish**

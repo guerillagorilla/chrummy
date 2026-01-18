@@ -14,7 +14,6 @@ const PUBLIC_ROOT = path.join(ROOT, "public");
 const SRC_ROOT = path.join(ROOT, "src");
 const PORT = Number(process.env.PORT || 8000);
 const POLL_INTERVAL = 500;
-const ROOM_CODE_LENGTH = 4;
 const ROOM_IDLE_MS = 1000 * 60 * 5;
 const AI_TURN_DELAY_MS = 3000;
 const IS_PROD = process.env.NODE_ENV === "production";
@@ -22,19 +21,36 @@ const IS_PROD = process.env.NODE_ENV === "production";
 let version = 0;
 const rooms = new Map();
 
+const ROOM_WORDS = [
+  "MINT", "WAVE",
+];
+
 function makeRoomCode() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  let code = "";
-  while (code.length < ROOM_CODE_LENGTH) {
-    code += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return code;
+  const pick = () => ROOM_WORDS[Math.floor(Math.random() * ROOM_WORDS.length)];
+  return `${pick()} ${pick()}`;
 }
 
-function createRoom(maxPlayers) {
-  let code = makeRoomCode();
-  while (rooms.has(code)) {
+function normalizeRoomCode(value) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z ]/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function isRoomCode(value) {
+  return /^[A-Z]{4} [A-Z]{4}$/.test(value);
+}
+
+function createRoom(maxPlayers, requestedCode = null) {
+  let code = requestedCode;
+  if (!code) {
     code = makeRoomCode();
+    while (rooms.has(code)) {
+      code = makeRoomCode();
+    }
+  } else if (rooms.has(code)) {
+    throw new Error("Room already exists.");
   }
   const size = Number(maxPlayers);
   if (!Number.isInteger(size) || size < 2 || size > 10) {
@@ -54,6 +70,7 @@ function createRoom(maxPlayers) {
     llamaSocket: null,  // WebSocket connection to Llama service
     devMode: Array.from({ length: size }, () => false),
     aiTimer: null,
+    llamaTurnKey: null,
   };
   rooms.set(code, room);
   return room;
@@ -205,6 +222,23 @@ function broadcastState(room) {
       socket.send(JSON.stringify(stateForPlayer(room, idx)));
     }
   });
+  notifyLlamaState(room);
+}
+
+function notifyLlamaState(room) {
+  if (!room.game) return;
+  room.aiSeats.forEach((seatType, idx) => {
+    if (seatType !== "llama") return;
+    const payload = stateForPlayer(room, idx);
+    sendToLlama(room.code, payload, idx);
+    if (room.phase === "await_draw" && room.game.currentPlayerIndex === idx) {
+      const turnKey = `${room.phase}:${idx}:${room.game.roundIndex}:${room.game.drawPile.length}:${room.game.discardPile.length}`;
+      if (room.llamaTurnKey !== turnKey) {
+        room.llamaTurnKey = turnKey;
+        scheduleLlamaTurn(room, idx);
+      }
+    }
+  });
 }
 
 function resolveBuy(room) {
@@ -305,7 +339,6 @@ function finishAiTurn(room, aiIndex) {
 }
 
 // Llama AI turn handling
-const LLAMA_TIMEOUT_MS = 30000;  // 30 second timeout for Llama to respond
 
 function countLlamaSeats(room) {
   return room.aiSeats.filter((seat) => seat === "llama").length;
@@ -321,14 +354,8 @@ function scheduleLlamaTurn(room, aiIndex) {
   const hasSeatConnection = isLlamaConnected(room.code, aiIndex);
   const hasDefaultConnection = isLlamaConnected(room.code);
   if (!hasSeatConnection && !(singleSeat === aiIndex && hasDefaultConnection)) {
-    // No Llama connected, fall back to built-in AI
-    console.log(`[llama] No Llama connected for room ${room.code}, falling back to built-in AI`);
-    room.aiTimer = setTimeout(() => {
-      room.aiTimer = null;
-      if (!room.game || room.phase !== "await_draw") return;
-      aiTurn(room.game, aiIndex);
-      finishAiTurn(room, aiIndex);
-    }, AI_TURN_DELAY_MS);
+    // No Llama connected; wait until a connection arrives.
+    console.log(`[llama] No Llama connected for room ${room.code}, waiting for connection`);
     return;
   }
   
@@ -341,6 +368,7 @@ function scheduleLlamaTurn(room, aiIndex) {
     type: "your_turn",
     room: room.code,
     player_index: aiIndex,
+    seat: aiIndex,
     phase: "await_draw",
     round_number: game.roundIndex + 1,
     requirements: formatRequirements(game.currentRound().requirements),
@@ -361,15 +389,7 @@ function scheduleLlamaTurn(room, aiIndex) {
   };
   
   sendToLlama(room.code, turnRequest, aiIndex);
-  
-  // Set timeout for Llama response
-  room.aiTimer = setTimeout(() => {
-    room.aiTimer = null;
-    console.log(`[llama] Timeout waiting for Llama in room ${room.code}, falling back to built-in AI`);
-    if (!room.game || room.phase !== "await_draw") return;
-    aiTurn(room.game, aiIndex);
-    finishAiTurn(room, aiIndex);
-  }, LLAMA_TIMEOUT_MS);
+  // No timeout: wait for the Llama response.
 }
 
 function cardNotation(card) {
@@ -779,13 +799,26 @@ setLlamaActionHandler((roomCode, seat, action) => {
 });
 
 // Handle Llama joining a room - check if it's their turn
-setLlamaJoinHandler((roomCode, seat) => {
+setLlamaJoinHandler((roomCode, seat, wantsCreate) => {
+  if (wantsCreate) {
+    if (!isRoomCode(roomCode)) {
+      return { error: "Room code must be two 4-letter words." };
+    }
+    const room = createRoom(2, roomCode);
+    room.aiSeats[1] = "llama";
+    room.lastActive = Date.now();
+    updateRoomPhase(room);
+    broadcastState(room);
+    console.log(`[llama] Created room ${room.code} with Llama in seat 1`);
+    return { roomCode: room.code, seat: 1 };
+  }
+
   const room = rooms.get(roomCode);
-  if (!room || !room.game) return;
+  if (!room || !room.game) return { error: "Room not ready" };
   
   const singleSeat = getSingleLlamaSeat(room);
   const aiIndex = seat ?? singleSeat;
-  if (aiIndex === null) return;
+  if (aiIndex === null) return { error: "Seat required for Llama join" };
   if (room.aiSeats[aiIndex] === "llama" && room.phase === "await_draw" && room.game.currentPlayerIndex === aiIndex) {
     // It's Llama's turn and they just connected - cancel any fallback timer and give them the turn
     if (room.aiTimer) {
@@ -795,6 +828,7 @@ setLlamaJoinHandler((roomCode, seat) => {
     console.log(`[llama] Llama joined room ${roomCode} and it's their turn - sending state`);
     scheduleLlamaTurn(room, aiIndex);
   }
+  return { roomCode, seat: aiIndex };
 });
 
 // Centralized upgrade handler
@@ -847,7 +881,11 @@ wss.on("connection", (socket) => {
     }
 
     if (msg.type === "join_room") {
-      const code = String(msg.room || "").toUpperCase();
+      const code = normalizeRoomCode(msg.room);
+      if (!isRoomCode(code)) {
+        sendError(socket, "Room code must be two 4-letter words.");
+        return;
+      }
       const target = rooms.get(code);
       if (!target) {
         sendError(socket, "Room not found.");

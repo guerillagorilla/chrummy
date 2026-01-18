@@ -17,8 +17,8 @@ The game server exposes a WebSocket API at `ws://localhost:8000/api/bot` that al
 ```
 1. Connect to ws://localhost:8000/api/bot
 2. Receive: { type: "welcome", ... }
-3. Send: { action: "join", room: "ABCD", seat: 1 }
-4. Receive: { type: "joined", room: "ABCD", ... }
+3. Send: { action: "join", room: "MINT WOLF", create: true }
+4. Receive: { type: "joined", room: "MINT WAVE", seat: 1, ... }
 5. Wait for: { type: "your_turn", ... }
 6. Send: { action: "play", draw: "deck", discard: "7H" }
 7. Repeat from step 5
@@ -43,9 +43,9 @@ Sent after successfully joining a room.
 ```json
 {
   "type": "joined",
-  "room": "ABCD",
+  "room": "MINT WAVE",
   "seat": 1,
-  "message": "Joined room ABCD as Llama AI. Waiting for game to start and your turn."
+  "message": "Joined room MINT WAVE as Llama AI. Waiting for game to start and your turn."
 }
 ```
 
@@ -54,7 +54,7 @@ Sent when it's the AI's turn to play.
 ```json
 {
   "type": "your_turn",
-  "room": "ABCD",
+  "room": "MINT WAVE",
   "player_index": 1,
   "seat": 1,
   "phase": "await_draw",
@@ -84,6 +84,31 @@ Sent when it's the AI's turn to play.
 }
 ```
 
+#### `state`
+Sent on every game state update (for the Llama seat). Useful for detecting missed turns.
+```json
+{
+  "type": "state",
+  "room": "MOON STAR",
+  "playerIndex": 1,
+  "phase": "await_draw",
+  "currentPlayerIndex": 1,
+  "roundIndex": 0,
+  "drawCount": 39,
+  "discardTop": { "rank": "7", "suit": "hearts", "cid": 12 },
+  "you": {
+    "hand": [{ "rank": "7", "suit": "hearts", "cid": 42 }],
+    "melds": [],
+    "stagedMelds": [],
+    "hasLaidDown": false,
+    "totalScore": 0
+  },
+  "opponents": [
+    { "playerIndex": 0, "connected": true, "isAi": false, "hand": null }
+  ]
+}
+```
+
 #### `action_accepted`
 Sent after a valid move.
 ```json
@@ -109,11 +134,11 @@ Join a room as the Llama AI.
 ```json
 {
   "action": "join",
-  "room": "ABCD",
-  "seat": 1
+  "room": "MINT WOLF",
+  "create": true
 }
 ```
-`seat` is optional today (single Llama per room). When multiple Llama players are enabled, send the seat index you control.
+If `create` is true, the server creates a new room using the provided `room` value (format: `WORD WORD`). The Llama is assigned to seat 1. If `create` is false, you can provide a `seat` index to join an existing room.
 
 #### `play`
 Make a move. `action`, `draw`, and `discard` are required unless you go out by laying off your last card.
@@ -243,7 +268,7 @@ ws.on('message', async (data) => {
   const msg = JSON.parse(data);
   
   if (msg.type === 'welcome') {
-    ws.send(JSON.stringify({ action: 'join', room: 'ABCD', seat: 1 }));
+    ws.send(JSON.stringify({ action: 'join', room: 'MINT WOLF', create: true }));
   }
   
   if (msg.type === 'your_turn') {
@@ -290,10 +315,10 @@ Browser (you) vs Llama AI
 
 1. Open browser to `http://localhost:8000`
 2. Click **Create** to create a room
-3. Note the 4-letter room code (e.g., `ABCD`) shown in the top bar
+3. Note the two-word room code (e.g., `MINT WAVE`) shown in the top bar
 4. **Start your Llama connector** and have it join the room:
    ```json
-   { "action": "join", "room": "ABCD", "seat": 1 }
+   { "action": "join", "room": "MINT WOLF", "create": true }
    ```
 5. In browser, select **"Llama AI"** from the dropdown
 6. Click **"Add AI"**
@@ -306,11 +331,11 @@ Browser (Player 1) + Browser (Player 2) + Llama AI
 ```
 
 1. **Player 1:** Open browser, select "3P" (or more) from player count dropdown
-2. **Player 1:** Click **Create**, note the room code (e.g., `WXYZ`)
-3. **Player 2:** Open browser, enter room code `WXYZ`, click **Join**
+2. **Player 1:** Click **Create**, note the room code (e.g., `MINT WAVE`)
+3. **Player 2:** Open browser, enter room code `MINT WAVE`, click **Join**
 4. **Start your Llama connector** and have it join:
    ```json
-   { "action": "join", "room": "WXYZ", "seat": 1 }
+   { "action": "join", "room": "MINT WOLF", "create": true }
    ```
 5. **Any player in room:** Select **"Llama AI"** from dropdown, click **"Add AI"**
 6. Game starts when all seats are filled!
@@ -334,8 +359,8 @@ The repo includes a simple test bot:
 # Terminal 1: Start server
 npm run dev
 
-# Terminal 2: Create room in browser, get code (e.g., ABCD), then:
-node scripts/test_bot.mjs ABCD
+# Terminal 2: Create room in browser, get code (e.g., MINT WAVE), then:
+node scripts/test_bot.mjs "MINT WAVE"
 ```
 
 The test bot uses a dumb strategy (draw from deck, discard first card) but verifies the API works.
@@ -346,11 +371,7 @@ The Llama connector can connect:
 - **Before** adding the AI in the browser (recommended)
 - **After** adding the AI (the server will send the turn state when Llama connects)
 
-If Llama isn't connected when it's their turn, the server waits 30 seconds then falls back to built-in AI.
-
-## Timeout
-
-If the Llama AI doesn't respond within 30 seconds, the server falls back to the built-in AI for that turn.
+If Llama isn't connected when it's their turn, the server waits for a connection and does not auto-fallback.
 
 ## Future: Chat/Trash Talk
 

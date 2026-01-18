@@ -1,0 +1,1 @@
+/Users/guerillagorilla/git/assistant/LLM_GAME_EXPECTATIONS.md

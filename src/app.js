@@ -1555,10 +1555,26 @@ function createRoom() {
   sendSocket({ type: "create_room", players: size });
 }
 
+function normalizeRoomCode(value) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z ]/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function isRoomCode(value) {
+  return /^[A-Z]{4} [A-Z]{4}$/.test(value);
+}
+
 function joinRoom(code) {
-  const trimmed = String(code || "").trim().toUpperCase();
+  const trimmed = normalizeRoomCode(code);
   if (!trimmed) {
     setMessage("Enter a room code to join.");
+    return;
+  }
+  if (!isRoomCode(trimmed)) {
+    setMessage("Room code must be two 4-letter words.");
     return;
   }
   setMultiplayerEnabled(true);
@@ -1667,7 +1683,7 @@ if (sortHandBtn) {
 }
 
 roomCodeInput.addEventListener("input", () => {
-  roomCodeInput.value = roomCodeInput.value.toUpperCase().replace(/[^A-Z]/g, "");
+  roomCodeInput.value = normalizeRoomCode(roomCodeInput.value);
 });
 
 roomCodeInput.addEventListener("keydown", (event) => {

@@ -72,6 +72,6 @@ if (roomCode) {
   console.log(`Will join room: ${roomCode}`);
 } else {
   console.log("No room code provided. Create a room in the browser, then run:");
-  console.log("  node scripts/test_bot.mjs ROOM_CODE");
+  console.log("  node scripts/test_bot.mjs \"WORD WORD\"");
 }
 console.log("");

@@ -22,7 +22,7 @@ export const llamaConnections = new Map();
 // Callback for when Llama sends an action
 let onLlamaAction = null;
 
-// Callback for when Llama joins a room
+// Callback for when Llama joins a room (may create room)
 let onLlamaJoin = null;
 
 export function setLlamaActionHandler(handler) {
@@ -60,7 +60,7 @@ export function createBotApiServer(server, path = "/api/bot") {
       type: "welcome",
       message: "Connected to Chrummy Bot API",
       usage: {
-        join: { action: "join", room: "ABCD", seat: 1 },
+        join: { action: "join", room: "MAGIC", create: true },
         action: { 
           action: "play", 
           draw: "deck|discard",
@@ -104,12 +104,25 @@ export function createBotApiServer(server, path = "/api/bot") {
 
 function handleLlamaMessage(ws, msg, currentRoom, currentSeat, setRoom) {
   if (msg.action === "join") {
-    const roomCode = String(msg.room || "").toUpperCase();
-    if (!roomCode) {
+    const wantsCreate = Boolean(msg.create);
+    let roomCode = String(msg.room || "")
+      .toUpperCase()
+      .replace(/[^A-Z ]/g, "")
+      .trim()
+      .replace(/\s+/g, " ");
+    if (!roomCode && !wantsCreate) {
       ws.send(JSON.stringify({ type: "error", message: "Room code required" }));
       return;
     }
-    const seat = Number.isFinite(msg.seat) ? Number(msg.seat) : null;
+    if (wantsCreate && !/^[A-Z]{4} [A-Z]{4}$/.test(roomCode)) {
+      ws.send(JSON.stringify({ type: "error", message: "Magic word must be two 4-letter words" }));
+      return;
+    }
+    if (!wantsCreate && roomCode && !/^[A-Z]{4} [A-Z]{4}$/.test(roomCode)) {
+      ws.send(JSON.stringify({ type: "error", message: "Room code must be two 4-letter words" }));
+      return;
+    }
+    let seat = Number.isFinite(msg.seat) ? Number(msg.seat) : null;
     
     // Leave previous room if any
     if (currentRoom) {
@@ -123,7 +136,21 @@ function handleLlamaMessage(ws, msg, currentRoom, currentSeat, setRoom) {
       }
     }
     
-    // Join new room
+    if (onLlamaJoin) {
+      const result = onLlamaJoin(roomCode, seat, wantsCreate);
+      if (result?.error) {
+        ws.send(JSON.stringify({ type: "error", message: result.error }));
+        return;
+      }
+      if (result?.roomCode) {
+        roomCode = result.roomCode;
+      }
+      if (Number.isFinite(result?.seat)) {
+        seat = result.seat;
+      }
+    }
+
+    // Join new room (with resolved roomCode/seat)
     const roomConnections = llamaConnections.get(roomCode) ?? new Map();
     const seatKey = seat ?? "default";
     roomConnections.set(seatKey, ws);
@@ -139,9 +166,9 @@ function handleLlamaMessage(ws, msg, currentRoom, currentSeat, setRoom) {
     
     console.log(`[bot-api] Llama joined room ${roomCode}${seat !== null ? ` seat ${seat}` : ""}`);
     
-    // Notify server that Llama joined - may need to trigger a turn
+    // Now that the connection is registered, allow the server to trigger turn/state if needed.
     if (onLlamaJoin) {
-      onLlamaJoin(roomCode, seat);
+      onLlamaJoin(roomCode, seat, false);
     }
     return;
   }
