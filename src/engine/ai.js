@@ -16,6 +16,12 @@ const RANK_VALUES = {
   A: 14,
 };
 
+let strategyHook = null;
+
+export function setStrategyHook(fn) {
+  strategyHook = fn;
+}
+
 function isWild(card) {
   return card.isWild ? card.isWild() : card.rank === "2" || card.rank === JokerRank;
 }
@@ -229,7 +235,8 @@ export function chooseDrawSource(game, playerIndex) {
   return supportsRunSuit || supportsRound ? "discard" : "deck";
 }
 
-export function chooseDiscard(hand, avoidRanks, keepRanks, keepCards, forbiddenIds = new Set()) {
+export function getDiscardCandidates(hand, avoidRanks, keepRanks, keepCards, forbiddenIds = new Set()) {
+  if (!hand || hand.length === 0) return [];
   const nonWild = hand.filter((card) => !card.isWild());
   if (nonWild.length > 0) {
     const counts = new Map();
@@ -272,18 +279,101 @@ export function chooseDiscard(hand, avoidRanks, keepRanks, keepCards, forbiddenI
 
     const points = (card) => (["10", "J", "Q", "K", "A"].includes(card.rank) ? 10 : 5);
 
-    candidates.sort((a, b) => {
+    return [...candidates].sort((a, b) => {
       const countDiff = (counts.get(a.rank) ?? 0) - (counts.get(b.rank) ?? 0);
       if (countDiff !== 0) return countDiff;
       const pointsDiff = points(b) - points(a);
       if (pointsDiff !== 0) return pointsDiff;
       return a.rank.localeCompare(b.rank);
     });
-
-    return candidates[0];
   }
 
-  return hand[0];
+  return [...hand];
+}
+
+export function chooseDiscard(hand, avoidRanks, keepRanks, keepCards, forbiddenIds = new Set()) {
+  const candidates = getDiscardCandidates(hand, avoidRanks, keepRanks, keepCards, forbiddenIds);
+  return candidates[0] ?? null;
+}
+
+export function getDiscardCandidatesForPlayer(game, playerIndex, forbiddenIds = new Set()) {
+  const player = game.players[playerIndex];
+  if (!player) return [];
+  const avoidRanks = game.opponentMeldRanks(playerIndex);
+  const keepRanks = game.meldRanksFor(playerIndex);
+  const bestRunSuit = bestRunSuitForRound(game, playerIndex);
+  const keepCards = keepCardsForRound(game, playerIndex);
+  if (bestRunSuit) {
+    for (const card of player.hand) {
+      if (!card.isWild() && card.suit === bestRunSuit) {
+        keepCards.add(card.cid);
+      }
+    }
+  }
+  return getDiscardCandidates(player.hand, avoidRanks, keepRanks, keepCards, forbiddenIds);
+}
+
+export function getHandPhase(player) {
+  if (player.hasLaidDown || player.hand.length <= 5) return "late";
+  if (player.hand.length <= 9) return "mid";
+  return "early";
+}
+
+function createStrategyContext(base, candidates) {
+  const flagsView = base.flags ? new Set(base.flags) : null;
+  const safeCandidates = Object.freeze([...candidates].map((card) => Object.freeze(card)));
+  return Object.freeze({
+    ...base,
+    flags: flagsView,
+    candidates: safeCandidates,
+  });
+}
+
+function computeStrategyResult(context) {
+  if (!strategyHook) return null;
+  try {
+    const result = strategyHook(context);
+    return result || null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function applyStrategyResult(candidates, strategyResult, flags) {
+  if (!strategyResult) return candidates;
+
+  let adjusted = candidates;
+  if (Array.isArray(strategyResult.vetoIds) && strategyResult.vetoIds.length > 0) {
+    const veto = new Set(strategyResult.vetoIds);
+    const filtered = candidates.filter((card) => !veto.has(card.cid));
+    if (filtered.length > 0) {
+      adjusted = filtered;
+    }
+  }
+
+  if (
+    strategyResult.priorityAdjustments &&
+    typeof strategyResult.priorityAdjustments === "object"
+  ) {
+    const adjustments = strategyResult.priorityAdjustments;
+    const indexed = adjusted.map((card, index) => ({ card, index }));
+    indexed.sort((a, b) => {
+      const aAdj = Number(adjustments[a.card.cid] ?? adjustments[a.card.rank] ?? 0);
+      const bAdj = Number(adjustments[b.card.cid] ?? adjustments[b.card.rank] ?? 0);
+      if (aAdj !== bAdj) return bAdj - aAdj;
+      return a.index - b.index;
+    });
+    adjusted = indexed.map((item) => item.card);
+  }
+
+  if (Array.isArray(strategyResult.flags) && flags && typeof flags.clear === "function") {
+    flags.clear();
+    for (const flag of strategyResult.flags) {
+      flags.add(flag);
+    }
+  }
+
+  return adjusted;
 }
 
 export function aiTurn(game, playerIndex) {
@@ -294,7 +384,8 @@ export function aiTurn(game, playerIndex) {
 
   const log = [];
   if (drawn) {
-    log.push(`Drew ${drawChoice} (${drawn.rank}${drawn.suit}).`);
+    const drawLabel = drawChoice === "deck" ? "draw" : "discard";
+    log.push(`Drew from ${drawLabel} (${drawn.rank}${drawn.suit}).`);
   } else {
     log.push(`Tried to draw from ${drawChoice}, but pile was empty.`);
   }
@@ -359,6 +450,16 @@ export function aiTurn(game, playerIndex) {
     forbiddenIds.add(drawn.cid);
   }
   let discard = null;
+  let candidates = [];
+  const strategyFlags = player.strategyFlags || new Set();
+  const phase = getHandPhase(player);
+  const strategyContextBase = {
+    game,
+    playerIndex,
+    flags: strategyFlags,
+    phase,
+  };
+  let strategyResult = null;
   if (
     drawChoice === "discard" &&
     drawn &&
@@ -371,15 +472,37 @@ export function aiTurn(game, playerIndex) {
     } else {
       discard = drawn;
     }
+    candidates = discard ? [discard] : [];
   } else {
-    discard = chooseDiscard(player.hand, avoidRanks, keepRanks, keepCards, forbiddenIds);
+    candidates = getDiscardCandidates(player.hand, avoidRanks, keepRanks, keepCards, forbiddenIds);
+    const strategyContext = createStrategyContext(strategyContextBase, candidates);
+    strategyResult = computeStrategyResult(strategyContext);
+    candidates = applyStrategyResult(candidates, strategyResult, strategyFlags);
+    discard = candidates[0] ?? null;
   }
   if (discard && forbiddenIds.has(discard.cid)) {
     const nonWild = player.hand.filter((card) => !card.isWild());
     const altNonWild = nonWild.filter((card) => !forbiddenIds.has(card.cid));
     if (altNonWild.length > 0) {
       const altHand = [...altNonWild, ...player.hand.filter((card) => card.isWild())];
-      discard = chooseDiscard(altHand, avoidRanks, keepRanks, keepCards, new Set());
+      candidates = getDiscardCandidates(altHand, avoidRanks, keepRanks, keepCards, new Set());
+      candidates = applyStrategyResult(candidates, strategyResult, strategyFlags);
+      discard = candidates[0] ?? discard;
+    }
+  }
+  const finalCandidates = candidates;
+  if (discard && strategyHook?.onExplain) {
+    try {
+      strategyHook.onExplain({
+        ...strategyContextBase,
+        chosenDiscard: discard,
+        strategyResult,
+        finalCandidates,
+        candidates: finalCandidates,
+        phase,
+      });
+    } catch (err) {
+      // Ignore strategy explain failures to preserve deterministic AI flow.
     }
   }
   if (discard) {

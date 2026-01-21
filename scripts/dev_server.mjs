@@ -1,10 +1,11 @@
 import http from "node:http";
+import crypto from "node:crypto";
 import { createReadStream, promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
-import { Game, ROUNDS, canLayDownWithCard, formatRequirements } from "../src/engine/gameEngine.js";
-import { aiTurn } from "../src/engine/ai.js";
+import { Game, ROUNDS, canLayDownWithCard, formatRequirements, Meld } from "../src/engine/gameEngine.js";
+import { aiTurn, getDiscardCandidatesForPlayer, setStrategyHook } from "../src/engine/ai.js";
 import { createBotApiServer, sendToLlama, isLlamaConnected, setLlamaActionHandler, setLlamaJoinHandler } from "./bot_api.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -69,6 +70,9 @@ function createRoom(maxPlayers, requestedCode = null) {
     buyState: null,
     llamaSocket: null,  // WebSocket connection to Llama service
     devMode: Array.from({ length: size }, () => false),
+    strategyAdvice: Array.from({ length: size }, () => null),
+    pendingEngineMoves: Array.from({ length: size }, () => null),
+    pendingCandidatesHash: Array.from({ length: size }, () => null),
     aiTimer: null,
     llamaTurnKey: null,
   };
@@ -319,8 +323,7 @@ function scheduleAiTurn(room) {
       if (!room.game || room.phase !== "await_draw") return;
       const aiIndex = room.game.currentPlayerIndex;
       if (!room.aiSeats[aiIndex]) return;
-      aiTurn(room.game, aiIndex);
-      finishAiTurn(room, aiIndex);
+      runAdvisedAiTurn(room, aiIndex);
     }, AI_TURN_DELAY_MS);
   }
 }
@@ -399,6 +402,231 @@ function cardNotation(card) {
   return `${card.rank}${suitMap[card.suit]}`;
 }
 
+function cloneCard(card) {
+  if (!card) return null;
+  return {
+    rank: card.rank,
+    suit: card.suit,
+    cid: card.cid,
+    short() {
+      return `${this.rank}${this.suit}`;
+    },
+    isWild() {
+      return this.rank === "2" || this.rank === "JOKER";
+    },
+    isJoker() {
+      return this.rank === "JOKER";
+    },
+    isRed() {
+      return this.suit === "hearts" || this.suit === "diamonds";
+    },
+  };
+}
+
+function cloneMeld(meld) {
+  return new Meld({
+    type: meld.type,
+    rank: meld.rank ?? null,
+    suit: meld.suit ?? null,
+    cards: meld.cards.map(cloneCard),
+  });
+}
+
+function cloneGame(game) {
+  const clone = Object.create(Game.prototype);
+  clone.players = game.players.map((player) => ({
+    name: player.name,
+    hand: player.hand.map(cloneCard),
+    melds: player.melds.map(cloneMeld),
+    stagedMelds: player.stagedMelds.map((meld) => ({
+      ...meld,
+      cards: meld.cards.map(cloneCard),
+    })),
+    hasLaidDown: player.hasLaidDown,
+    totalScore: player.totalScore,
+    lastDiscardedRank: player.lastDiscardedRank,
+    lastDiscardedId: player.lastDiscardedId,
+    aiNoProgressTurns: player.aiNoProgressTurns,
+    strategyFlags: new Set(player.strategyFlags ?? []),
+  }));
+  clone.dealerIndex = game.dealerIndex;
+  clone.currentPlayerIndex = game.currentPlayerIndex;
+  clone.drawPile = game.drawPile.map(cloneCard);
+  clone.discardPile = game.discardPile.map(cloneCard);
+  clone.deadPile = game.deadPile.map(cloneCard);
+  clone.playersCount = game.playersCount;
+  clone.roundIndex = game.roundIndex;
+  return clone;
+}
+
+function canDrawDeck(game) {
+  if (!game) return false;
+  return game.drawPile.length > 0 || game.deadPile.length > 0 || game.discardPile.length > 1;
+}
+
+function canDrawDiscard(room) {
+  if (!room?.game) return false;
+  if (room.buyState?.resolved) return false;
+  return room.game.discardPile.length > 0;
+}
+
+function hashCandidates(candidates) {
+  const serialized = JSON.stringify(candidates);
+  return crypto.createHash("sha256").update(serialized).digest("hex");
+}
+
+function candidatesPayload(room, playerIndex) {
+  const game = room.game;
+  const phase = room.phase;
+  const candidates = [];
+  let nextId = 1;
+  if (phase === "await_draw") {
+    if (canDrawDeck(game)) {
+      const discardCard = getDiscardCandidatesForPlayer(game, playerIndex)[0] ?? null;
+      candidates.push({
+        id: nextId++,
+        draw: "deck",
+        meld: false,
+        discard: discardCard ? cardNotation(discardCard) : null,
+      });
+    }
+    if (canDrawDiscard(room)) {
+      const topDiscard = game.discardPile[game.discardPile.length - 1] ?? null;
+      candidates.push({
+        id: nextId++,
+        draw: "discard",
+        meld: false,
+        discard: topDiscard ? cardNotation(topDiscard) : null,
+      });
+    }
+  } else if (phase === "await_discard") {
+    const discardCandidates = getDiscardCandidatesForPlayer(game, playerIndex);
+    discardCandidates.forEach((card) => {
+      candidates.push({
+        id: nextId++,
+        draw: null,
+        meld: false,
+        discard: cardNotation(card),
+      });
+    });
+  }
+  const candidatesHash = hashCandidates(candidates);
+  if (room.pendingCandidatesHash) {
+    room.pendingCandidatesHash[playerIndex] = candidatesHash;
+  }
+  return {
+    type: "candidates",
+    room: room.code,
+    candidates_hash: candidatesHash,
+    candidates,
+  };
+}
+
+function normalizeStrategy(strategy = {}) {
+  return {
+    vetoIds: Array.isArray(strategy.vetoIds) ? strategy.vetoIds.slice() : [],
+    priorityAdjustments:
+      strategy.priorityAdjustments && typeof strategy.priorityAdjustments === "object"
+        ? { ...strategy.priorityAdjustments }
+        : {},
+    flags: Array.isArray(strategy.flags) ? strategy.flags.slice() : [],
+    rationale: typeof strategy.rationale === "string" ? strategy.rationale : undefined,
+  };
+}
+
+function mapStrategyAdvice(room, playerIndex, advice) {
+  const payload = candidatesPayload(room, playerIndex);
+  const candidateMap = new Map(payload.candidates.map((candidate) => [candidate.id, candidate]));
+  const vetoIds = [];
+  const priorityAdjustments = {};
+  if (Array.isArray(advice.vetoIds)) {
+    advice.vetoIds.forEach((id) => {
+      if (candidateMap.has(id)) {
+        const discard = candidateMap.get(id)?.discard;
+        const discardCard = resolveDiscardByNotation(room, playerIndex, discard);
+        if (discardCard) vetoIds.push(discardCard.cid);
+      }
+    });
+  }
+  if (advice.priorityAdjustments && typeof advice.priorityAdjustments === "object") {
+    Object.entries(advice.priorityAdjustments).forEach(([idKey, value]) => {
+      const id = Number(idKey);
+      if (!Number.isFinite(id)) return;
+      if (!candidateMap.has(id)) return;
+      const discard = candidateMap.get(id)?.discard;
+      const discardCard = resolveDiscardByNotation(room, playerIndex, discard);
+      if (discardCard) {
+        priorityAdjustments[discardCard.cid] = Number(value) || 0;
+      }
+    });
+  }
+  return {
+    vetoIds,
+    priorityAdjustments,
+    flags: Array.isArray(advice.flags) ? advice.flags.slice() : [],
+    rationale: typeof advice.rationale === "string" ? advice.rationale : undefined,
+  };
+}
+
+function resolveDiscardByNotation(room, playerIndex, notation) {
+  if (!notation) return null;
+  const game = room.game;
+  const player = game.players[playerIndex];
+  const topDiscard = game.discardPile[game.discardPile.length - 1] ?? null;
+  if (topDiscard && cardNotation(topDiscard) === notation) return topDiscard;
+  return player.hand.find((card) => cardNotation(card) === notation) ?? null;
+}
+
+function computeEngineMove(room, playerIndex, strategy) {
+  const gameClone = cloneGame(room.game);
+  if (strategy) {
+    setStrategyHook((context) => {
+      if (context.playerIndex !== playerIndex) return null;
+      return strategy;
+    });
+  }
+  let result;
+  try {
+    result = aiTurn(gameClone, playerIndex);
+  } finally {
+    if (strategy) setStrategyHook(null);
+  }
+  const drewFrom = result?.drawChoice === "discard" ? "discard" : "deck";
+  const didMeld = result?.log?.some((entry) => entry.includes("Laid down")) ?? false;
+  return {
+    draw: drewFrom,
+    meld: didMeld,
+    discard: result?.discarded ? cardNotation(result.discarded) : null,
+  };
+}
+
+function runAdvisedAiTurn(room, aiIndex) {
+  const strategy = room.strategyAdvice?.[aiIndex] ?? null;
+  if (room.strategyAdvice) {
+    room.strategyAdvice[aiIndex] = null;
+  }
+  if (room.pendingEngineMoves) {
+    room.pendingEngineMoves[aiIndex] = null;
+  }
+  if (room.pendingCandidatesHash) {
+    room.pendingCandidatesHash[aiIndex] = null;
+  }
+  if (strategy) {
+    setStrategyHook((context) => {
+      if (context.playerIndex !== aiIndex) return null;
+      return strategy;
+    });
+  }
+  try {
+    aiTurn(room.game, aiIndex);
+  } finally {
+    if (strategy) {
+      setStrategyHook(null);
+    }
+  }
+  finishAiTurn(room, aiIndex);
+}
+
 function handleLlamaAction(room, aiIndex, action) {
   if (!room.game || room.phase !== "await_draw") return false;
   if (room.game.currentPlayerIndex !== aiIndex) return false;
@@ -411,8 +639,18 @@ function handleLlamaAction(room, aiIndex, action) {
   
   const game = room.game;
   const player = game.players[aiIndex];
-  
+  const clearAdvice = () => {
+    if (room.strategyAdvice) {
+      room.strategyAdvice[aiIndex] = null;
+    }
+  };
+
   try {
+    if (action.draw == null && action.discard == null) {
+      runAdvisedAiTurn(room, aiIndex);
+      return true;
+    }
+
     if (room.maxPlayers >= 3 && room.buyState && !room.buyState.resolved) {
       const buyResult = resolveBuy(room);
       if (buyResult) {
@@ -480,6 +718,12 @@ function handleLlamaAction(room, aiIndex, action) {
       }
       game.discard(player, discardCard);
     }
+    if (room.pendingEngineMoves) {
+      room.pendingEngineMoves[aiIndex] = null;
+    }
+    if (room.pendingCandidatesHash) {
+      room.pendingCandidatesHash[aiIndex] = null;
+    }
     
     room.buyState = {
       discardCid: discardCard.cid,
@@ -487,6 +731,9 @@ function handleLlamaAction(room, aiIndex, action) {
       resolved: false,
     };
     queueAiBuys(room);
+    if (room.strategyAdvice) {
+      room.strategyAdvice[aiIndex] = null;
+    }
     if (game.checkWinAfterDiscard(player)) {
       game.applyRoundScores(aiIndex);
       room.phase = "game_over";
@@ -505,6 +752,8 @@ function handleLlamaAction(room, aiIndex, action) {
     aiTurn(game, aiIndex);
     finishAiTurn(room, aiIndex);
     return false;
+  } finally {
+    clearAdvice();
   }
 }
 
@@ -786,13 +1035,67 @@ setLlamaActionHandler((roomCode, seat, action) => {
   if (aiIndex === null) {
     return { error: "Seat required for Llama action" };
   }
+  const requestedIndex = Number.isFinite(action.player_index) ? Number(action.player_index) : aiIndex;
+  if (requestedIndex !== aiIndex) {
+    return { error: "Seat mismatch" };
+  }
+
+  if (action.action === "candidates") {
+    if (room.phase === "waiting_for_players") {
+      return { response: candidatesPayload(room, aiIndex) };
+    }
+    if (room.game.currentPlayerIndex !== aiIndex) {
+      return { error: "Not Llama's turn" };
+    }
+    return { response: candidatesPayload(room, aiIndex) };
+  }
+
+  if (action.action === "strategy" || action.action === "advise") {
+    if (room.game.currentPlayerIndex !== aiIndex) {
+      return { error: "Not Llama's turn" };
+    }
+    const incomingHash = action.candidates_hash || action.candidatesHash || action.hash || null;
+    const expectedHash = room.pendingCandidatesHash?.[aiIndex] ?? null;
+    if (!incomingHash || !expectedHash || incomingHash !== expectedHash) {
+      return { error: "Stale or mismatched strategy" };
+    }
+    if (!room.strategyAdvice) {
+      room.strategyAdvice = Array.from({ length: room.maxPlayers }, () => null);
+    }
+    const advice = normalizeStrategy(action.advice || action.strategy || {});
+    room.strategyAdvice[aiIndex] = mapStrategyAdvice(room, aiIndex, advice);
+    if (room.pendingEngineMoves) {
+      room.pendingEngineMoves[aiIndex] = computeEngineMove(room, aiIndex, room.strategyAdvice[aiIndex]);
+    }
+    return {
+      response: {
+        type: "engine_move",
+        room: room.code,
+        move: room.pendingEngineMoves?.[aiIndex] ?? null,
+      },
+    };
+  }
+
   if (!room.aiSeats[aiIndex] || room.aiSeats[aiIndex] !== "llama") {
     return { error: "Not Llama's turn" };
   }
   if (room.game.currentPlayerIndex !== aiIndex) {
     return { error: "Not Llama's turn" };
   }
-  
+
+  if (action.action === "play") {
+    const pendingMove = room.pendingEngineMoves?.[aiIndex] ?? null;
+    if (pendingMove && action.draw && action.discard) {
+      const matches =
+        pendingMove.draw === action.draw &&
+        pendingMove.discard === action.discard &&
+        Boolean(pendingMove.meld) === Boolean(action.meld);
+      if (!matches) {
+        return { error: "Move does not match engine selection" };
+      }
+    }
+  }
+
   // Process the action
   const success = handleLlamaAction(room, aiIndex, action);
   return success ? { message: "Move accepted" } : { error: "Invalid move" };
@@ -1223,6 +1526,12 @@ wss.on("connection", (socket) => {
         } else {
           room.phase = "await_draw";
           game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
+        }
+        if (room.strategyAdvice) {
+          room.strategyAdvice[playerIndex] = null;
+        }
+        if (room.pendingCandidatesHash) {
+          room.pendingCandidatesHash[playerIndex] = null;
         }
         broadcastState(room);
         runAiTurns(room);

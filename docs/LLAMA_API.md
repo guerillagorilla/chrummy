@@ -7,7 +7,8 @@ This document describes how to connect an LLM (like Llama via Ollama) to play Ch
 The game server exposes a WebSocket API at `ws://localhost:8000/api/bot` that allows an external AI to:
 - Join a game room as the "Llama AI" player
 - Receive game state when it's their turn
-- Send back moves (draw, meld, discard)
+- Request candidate moves from the engine
+- Send back strategy advice and receive the engine-selected move
 - Optionally send chat messages (trash talk)
 
 `docs/rules.md` is the source of truth for gameplay rules. This document is a quick integration reference.
@@ -20,7 +21,9 @@ The game server exposes a WebSocket API at `ws://localhost:8000/api/bot` that al
 3. Send: { action: "join", room: "MINT WOLF", create: true }
 4. Receive: { type: "joined", room: "MINT WAVE", seat: 1, ... }
 5. Wait for: { type: "your_turn", ... }
-6. Send: { action: "play", draw: "deck", discard: "7H" }
+6. Send: { action: "strategy", state: {...}, candidates: [...], advice: {...} }
+7. Receive: { type: "engine_move", move: {...} }
+8. Send: { action: "play", draw: "deck", discard: "7H" }
 7. Repeat from step 5
 ```
 
@@ -151,6 +154,27 @@ Make a move. `action`, `draw`, and `discard` are required unless you go out by l
 }
 ```
 
+#### `candidates`
+Request candidate moves from the engine for the current state.
+```json
+{
+  "action": "candidates",
+  "state": { "type": "your_turn", "...": "..." }
+}
+```
+
+#### `strategy`
+Send strategy advice and request the engine-selected move.
+```json
+{
+  "action": "strategy",
+  "state": { "type": "your_turn", "...": "..." },
+  "candidates": [ { "id": 1, "draw": "deck", "meld": false, "discard": "7H" } ],
+  "candidates_hash": "abc123",
+  "advice": { "vetoIds": [], "priorityAdjustments": {}, "flags": [], "rationale": "" }
+}
+```
+
 | Field | Required | Description |
 |-------|----------|-------------|
 | `draw` | Yes | `"deck"` or `"discard"` - where to draw from |
@@ -251,11 +275,9 @@ RULES REMINDER:
 - You must meet ALL requirements to lay down
 - After laying down, you can add cards to any melds
 
-What do you do?
-1. Draw from "deck" or "discard"?
-2. Which card to discard?
+Never choose a move. Provide strategy advice only.
 
-Respond with JSON: {"draw": "deck" or "discard", "meld": true/false, "discard": "card notation"}
+Respond with JSON: {"vetoIds":[], "priorityAdjustments":{}, "flags":[], "rationale":""}
 ```
 
 ## Example Session
@@ -387,3 +409,24 @@ The API supports a `chat` field for personality:
 ```
 
 (Chat display in the UI is not yet implemented)
+#### `candidates`
+Sent after requesting candidate moves.
+```json
+{
+  "type": "candidates",
+  "room": "MOON STAR",
+  "candidates_hash": "abc123",
+  "candidates": [
+    { "id": 1, "draw": "deck", "meld": false, "discard": "7H" }
+  ]
+}
+```
+
+#### `engine_move`
+Sent after strategy advice is submitted to the engine.
+```json
+{
+  "type": "engine_move",
+  "move": { "draw": "deck", "meld": false, "discard": "7H" }
+}
+```

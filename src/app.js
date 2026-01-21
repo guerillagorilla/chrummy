@@ -130,6 +130,43 @@ function setMessage(text, state = "normal") {
   }
 }
 
+function formatCardForLog(card) {
+  if (!card) return "none";
+  const rank = card.rank ?? "";
+  const suit = card.suit ?? "";
+  const cid = card.cid ?? "unknown";
+  return `${rank}${suit}#${cid}`;
+}
+
+function formatDebugDetails(details) {
+  if (!details || typeof details !== "object") return "";
+  const parts = Object.entries(details)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => {
+      if (typeof value === "object") {
+        try {
+          return `${key}=${JSON.stringify(value)}`;
+        } catch (err) {
+          return `${key}=[object]`;
+        }
+      }
+      return `${key}=${value}`;
+    });
+  return parts.length > 0 ? ` (${parts.join(", ")})` : "";
+}
+
+function logPlayerAction(action, details = {}) {
+  const debugEnabled = devMode || window.debugPlayerActions;
+  if (!debugEnabled) return;
+  const timestamp = new Date().toISOString();
+  console.log(`[PLAYER] ${timestamp} ${action}`, details);
+  if (opponentLogEl) {
+    const item = document.createElement("li");
+    item.textContent = `YOU: ${action}${formatDebugDetails(details)}`;
+    opponentLogEl.prepend(item);
+  }
+}
+
 function stopWinCelebration() {
   if (!winCelebrationEl) return;
   if (winCelebrationTimer) {
@@ -917,6 +954,7 @@ function handlePlayerDraw(source) {
       return;
     }
     if (!isPlayerTurn() || currentPhase() !== "await_draw") return;
+    logPlayerAction("draw", { mode: "multiplayer", source });
     sendAction("draw", { source });
     return;
   }
@@ -926,8 +964,10 @@ function handlePlayerDraw(source) {
   if (card) {
     setMessage(`You drew ${card.rank} from ${source}.`);
     playSound("draw");
+    logPlayerAction("draw", { mode: "local", source, card: formatCardForLog(card) });
   } else {
     setMessage(`No cards available in ${source}.`);
+    logPlayerAction("draw_empty", { mode: "local", source });
   }
   state = "await_discard";
   renderAll();
@@ -946,10 +986,12 @@ function handlePlayerDiscard(card) {
       const stagedCount = multiplayerState.you.stagedMelds?.length ?? 0;
       if (stagedCount > 0) {
         pendingDiscardCardId = card.cid;
+        logPlayerAction("discard_pending_laydown", { mode: "multiplayer", card: formatCardForLog(card) });
         sendAction("laydown");
         return;
       }
     }
+    logPlayerAction("discard", { mode: "multiplayer", card: formatCardForLog(card) });
     sendAction("discard", { cardId: card.cid });
     return;
   }
@@ -971,6 +1013,7 @@ function handlePlayerDiscard(card) {
   game.discard(player, card);
   setMessage(`You discarded ${card.rank}.`);
   playSound("discard");
+  logPlayerAction("discard", { mode: "local", card: formatCardForLog(card) });
   renderAll();
   if (game.checkWin(game.players[0])) {
     game.applyRoundScores(0);
@@ -989,9 +1032,6 @@ function handlePlayerDiscard(card) {
 function runAiTurn() {
   const result = aiTurn(game, 1);
   result.log.forEach((entry) => logOpponent(entry));
-  if (result.drawChoice === "deck" && result.drewCard && devMode) {
-    logOpponent(`(Hidden draw was ${result.drewCard.rank}.)`);
-  }
   if (result.drewCard) {
     playSound("draw");
   }
@@ -1068,6 +1108,7 @@ laydownSelectedBtn.addEventListener("click", () => {
       setMessage("Stage cards first.");
       return;
     }
+    logPlayerAction("laydown", { mode: "multiplayer", staged: staged.length });
     sendAction("laydown");
     return;
   }
@@ -1081,6 +1122,7 @@ laydownSelectedBtn.addEventListener("click", () => {
     const summary = formatRequirements(game.currentRound().requirements);
     setMessage(`You laid down ${summary}.`);
     playSound("play");
+    logPlayerAction("laydown", { mode: "local", staged: player.melds.length });
     resetSelections();
   } else {
     const summary = formatRequirements(game.currentRound().requirements);
@@ -1097,6 +1139,7 @@ autoStageBtn.addEventListener("click", () => {
       return;
     }
     if (!isPlayerTurn() || currentPhase() !== "await_discard") return;
+    logPlayerAction("auto_stage", { mode: "multiplayer" });
     sendAction("auto_stage");
     return;
   }
@@ -1104,10 +1147,12 @@ autoStageBtn.addEventListener("click", () => {
   const player = game.players[0];
   if (game.autoStageMelds(player)) {
     setMessage("Staged melds. Review and click Lay Down Selected.");
+    logPlayerAction("auto_stage", { mode: "local", staged: player.stagedMelds.length });
     renderAll();
     return;
   }
   setMessage("No valid melds to stage.");
+  logPlayerAction("auto_stage_none", { mode: "local" });
 });
 
 restartBtn.addEventListener("click", () => {
@@ -1347,6 +1392,7 @@ function stageCardForLaydown(cardId, meldIndex = null) {
       return;
     }
     if (!isPlayerTurn() || currentPhase() !== "await_discard") return;
+    logPlayerAction("stage", { mode: "multiplayer", cardId, meldIndex });
     sendAction("stage", { cardId, meldIndex });
     return;
   }
@@ -1354,6 +1400,7 @@ function stageCardForLaydown(cardId, meldIndex = null) {
   const card = player.hand.find((c) => c.cid === cardId);
   if (!card) return;
   game.stageCard(player, card, meldIndex);
+  logPlayerAction("stage", { mode: "local", card: formatCardForLog(card), meldIndex });
   renderAll();
 }
 
@@ -1361,6 +1408,7 @@ function unstageCardForLaydown(cardId) {
   if (multiplayerEnabled) {
     if (!multiplayerState) return;
     if (!isPlayerTurn() || currentPhase() !== "await_discard") return;
+    logPlayerAction("unstage", { mode: "multiplayer", cardId });
     sendAction("unstage", { cardId });
     return;
   }
@@ -1370,6 +1418,7 @@ function unstageCardForLaydown(cardId) {
   const card = player.stagedMelds.flatMap((meld) => meld.cards).find((c) => c.cid === cardId);
   if (!card) return;
   game.unstageCard(player, card);
+  logPlayerAction("unstage", { mode: "local", card: formatCardForLog(card) });
   renderAll();
 }
 
@@ -1545,6 +1594,7 @@ function sendAction(action, payload = {}) {
     setMessage("Not connected to server.");
     return;
   }
+  logPlayerAction("send_action", { action, payload });
   sendSocket({ type: "action", action, ...payload });
 }
 
@@ -1660,6 +1710,7 @@ if (buyBtn) {
     buyPending = true;
     updateBuyControls(multiplayerState);
     setMessage("Buy requested.");
+    logPlayerAction("buy", { mode: "multiplayer" });
     sendSocket({ type: "buy" });
   });
 }
@@ -1668,6 +1719,7 @@ if (sortHandBtn) {
   sortHandBtn.addEventListener("click", () => {
     const wasEnabled = autoSortEnabled;
     autoSortEnabled = !autoSortEnabled;
+    logPlayerAction("toggle_sort", { enabled: autoSortEnabled });
     if (wasEnabled && !autoSortEnabled) {
       const view = getView();
       const sortedHand = sortHand(view.you.hand);
@@ -1763,12 +1815,14 @@ function handleLayoff(cardId, meldEl) {
     const meldOwner = Number(meldEl.dataset.ownerIndex);
     const meldIndex = Number(meldEl.dataset.meldIndex);
     if (!Number.isFinite(meldOwner)) return false;
+    logPlayerAction("layoff", { mode: "multiplayer", card: formatCardForLog(card), meldOwner, meldIndex });
     sendAction("layoff", { cardId, meldOwner, meldIndex });
     return true;
   }
   if (game.layOffCardToMeld(game.players[0], card, meld)) {
     setMessage(`Laid off ${card.rank} to meld.`);
     playSound("play");
+    logPlayerAction("layoff", { mode: "local", card: formatCardForLog(card), meldIndex: meldEl?.dataset?.meldIndex });
     resetSelections();
     renderAll();
     if (game.checkWin(game.players[0])) {

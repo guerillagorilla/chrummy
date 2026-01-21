@@ -158,6 +158,7 @@ export class Player {
     this.lastDiscardedRank = null;
     this.lastDiscardedId = null;
     this.aiNoProgressTurns = 0;
+    this.strategyFlags = new Set();
   }
 }
 

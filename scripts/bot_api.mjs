@@ -67,7 +67,19 @@ export function createBotApiServer(server, path = "/api/bot") {
           meld: true,  // optional, auto-meld if possible
           discard: "7H or cid",
           chat: "optional trash talk message"
-        }
+        },
+        candidates: { action: "candidates", state: { room: "MAGIC", player_index: 1 } },
+        strategy: {
+          action: "strategy",
+          state: { room: "MAGIC", player_index: 1 },
+          candidates: [],
+          advice: {
+            vetoIds: [],
+            priorityAdjustments: {},
+            flags: ["preserve_wilds"],
+            rationale: "Preserving flexibility early",
+          },
+        },
       },
       card_notation: "7H = 7 of hearts, QS = queen of spades, JK = joker",
     }));
@@ -173,7 +185,7 @@ function handleLlamaMessage(ws, msg, currentRoom, currentSeat, setRoom) {
     return;
   }
   
-  if (msg.action === "play") {
+  if (msg.action === "play" || msg.action === "candidates" || msg.action === "advise" || msg.action === "strategy") {
     if (!currentRoom) {
       ws.send(JSON.stringify({ type: "error", message: "Join a room first" }));
       return;
@@ -185,6 +197,8 @@ function handleLlamaMessage(ws, msg, currentRoom, currentSeat, setRoom) {
         const result = onLlamaAction(currentRoom, currentSeat, msg);
         if (result.error) {
           ws.send(JSON.stringify({ type: "error", message: result.error }));
+        } else if (result.response) {
+          ws.send(JSON.stringify(result.response));
         } else {
           ws.send(JSON.stringify({ type: "action_accepted", message: result.message || "Move accepted" }));
         }
